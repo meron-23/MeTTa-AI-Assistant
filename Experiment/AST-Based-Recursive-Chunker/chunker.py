@@ -75,7 +75,6 @@ def main():
     try:
         with open(args.input_file, 'r', encoding='utf-8') as f:
             source_code = f.read()
-            print(source_code[:1000])
     except FileNotFoundError:
         print(f"Error: Input file not found at '{args.input_file}'")
         return
