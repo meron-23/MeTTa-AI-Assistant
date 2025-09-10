@@ -27,7 +27,7 @@ class InteractiveCodeBERTRetrieval:
     def load_data(self):
         """Load function data and create embeddings"""
         try:
-            with open('datas/metta_codebert_complete.json', 'r') as f:
+            with open('datas/python_test_data.json', 'r') as f:
                 self.functions = json.load(f)
         except FileNotFoundError:
             print("Error: Run extractor first to create data file")
@@ -230,3 +230,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+    #try embedding python and test

@@ -27,7 +27,7 @@ class DiagnosticRetrieval:
     def load_data(self):
         """Load function data"""
         try:
-            with open('datas/metta_codebert_complete.json', 'r') as f:
+            with open('datas/python_test_data.json', 'r') as f:
                 self.functions = json.load(f)
             print(f"Loaded {len(self.functions)} functions")
             return True
