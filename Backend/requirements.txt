@@ -1,0 +1,8 @@
+﻿fastapi
+uvicorn[standard]
+langchain
+langchain-google-genai
+qdrant-client
+pymongo
+pydantic
+python-dotenv

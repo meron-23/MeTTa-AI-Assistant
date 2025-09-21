@@ -1,0 +1,29 @@
+# Byte-compiled / cache
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+
+# Virtual environments
+.env
+.venv/
+venv/
+ENV/
+
+# Distribution / packaging
+*.egg-info/
+dist/
+build/
+
+# Docker
+*.pid
+*.log
+
+# VSCode / PyCharm
+.vscode/
+.idea/
+
+# Local env files
+.env
+.env.*
