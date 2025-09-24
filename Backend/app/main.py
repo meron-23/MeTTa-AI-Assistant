@@ -1,11 +1,12 @@
-﻿from fastapi import FastAPI, Request
+﻿from fastapi import FastAPI, Request, Response
 import time
 from loguru import logger
 from contextlib import asynccontextmanager
+from typing import AsyncIterator, Dict
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     logger.info("Application has started")
     yield
     logger.info("Application shutting down .....")
@@ -13,7 +14,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(lifespan=lifespan)
 
 @app.middleware("http")
-async def log_requests(request: Request, call_next):
+async def log_requests(request: Request, call_next) -> Response:
     start_time = time.time()
     response = await call_next(request)
     duration_ms = int((time.time() - start_time) * 1000)
@@ -23,5 +24,5 @@ async def log_requests(request: Request, call_next):
     return response
 
 @app.get("/health")
-def health_check():
+def health_check() -> Dict[str, str]:
     return {"status": "ok"}

@@ -1,6 +1,7 @@
 import os
 import sys
 import logging
+from typing import Any, Dict
 from loguru import logger
 from dotenv import load_dotenv
 
@@ -16,7 +17,7 @@ LEVEL_COLORS = {
 load_dotenv()
 
 # Custom format for log messages
-def custom_format(record):
+def custom_format(record: Dict[str, Any]) -> str:
     rel_file = os.path.relpath(record["file"].path)
     level_name = record["level"].name
     level_colored = LEVEL_COLORS.get(level_name, "{level}")
@@ -30,7 +31,7 @@ def custom_format(record):
     )
 
 
-def setup_logging(log_level="DEBUG"):
+def setup_logging(log_level: str = "DEBUG") -> None:
     """
     Setup Loguru logging for the project.
     Creates console logs, file logs, error logs, and JSON structured logs.
