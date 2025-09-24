@@ -12,6 +12,8 @@ services:
       - mongo
     env_file:
       - .env
+    environment:
+      - LOG_DIR=/app/logs
 
   qdrant:
     image: qdrant/qdrant:v1.7.3

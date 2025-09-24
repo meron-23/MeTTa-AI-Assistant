@@ -2,6 +2,7 @@ import os
 import sys
 import logging
 from loguru import logger
+from dotenv import load_dotenv
 
 # Define colors for log levels
 LEVEL_COLORS = {
@@ -12,6 +13,7 @@ LEVEL_COLORS = {
     "CRITICAL": "<red>{level}</red>",
 }
 
+load_dotenv()
 
 # Custom format for log messages
 def custom_format(record):
@@ -44,8 +46,14 @@ def setup_logging(log_level="DEBUG"):
         "CRITICAL": logging.CRITICAL,
     }
     std_level = std_levels.get(level_name, logging.DEBUG)
-    base_dir = os.path.dirname(os.path.abspath(__file__))
-    log_dir = os.path.join(base_dir, "../../logs")
+
+    # Fallback to relative path if the environment variable is not set
+    env_log_dir = os.getenv("LOG_DIR")
+    if env_log_dir and env_log_dir.strip():
+        log_dir = env_log_dir.strip()
+    else:
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+        log_dir = os.path.join(base_dir, "../../logs")
     os.makedirs(log_dir, exist_ok=True)
 
     # Paths for different log files
