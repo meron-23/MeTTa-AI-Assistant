@@ -86,3 +86,39 @@ def get_chunks(filter_query: dict = None, limit: int = 10):
     filter_query = filter_query or {}  # If no filter is given, get all
     cursor = chunks_collection.find(filter_query, {"_id": 0}).limit(limit)
     return list(cursor)
+
+
+# Function to update embedding status of a chunk by chunkId.
+def update_embedding_status(chunk_id: str, status: bool):
+    """
+    Update the embedding status of a chunk.
+    """
+    result = chunks_collection.update_one(
+        {"chunkId": chunk_id},
+        {"$set": {"isEmbedded": status}}
+    )
+    return result.modified_count
+
+# Function to update any fields of a single chunk by chunkID.
+def update_chunk(chunk_id: str, updates: dict) -> int:
+    """
+    Update any fields of a single chunk by chunkId.
+    Returns the number of documents modified (0 or 1).
+    """
+    result = chunks_collection.update_one(
+        {"chunkId": chunk_id},
+        {"$set": updates}
+    )
+    return result.modified_count
+
+# Function to update multiple chunks matching a filter query.
+def update_chunks(filter_query: dict, updates: dict) -> int:
+    """
+    Update any fields for multiple chunks matching the filter.
+    Returns the number of documents modified.
+    """
+    result = chunks_collection.update_many(
+        filter_query,
+        {"$set": updates}
+    )
+    return result.modified_count
