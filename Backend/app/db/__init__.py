@@ -122,3 +122,12 @@ def update_chunks(filter_query: dict, updates: dict) -> int:
         {"$set": updates}
     )
     return result.modified_count
+
+# Function to delete a chunk by chunkId.
+
+def delete_chunk(chunk_id: str):
+    """ 
+    Delete a chunk by its ID.
+    """
+    result = chunks_collection.delete_one({"chunkId": chunk_id})
+    return result.deleted_count
