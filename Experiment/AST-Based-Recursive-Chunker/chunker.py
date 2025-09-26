@@ -1,66 +1,97 @@
-import metta_parser 
+import os
 import argparse
+import psycopg
+import metta_ast_parser 
 from typing import List
+from db import Database as DB
+from dotenv import load_dotenv
+from preprocess import preprocess_code
 
 # Recursive Chunking Algorithm (with source_code passed as an argument)
 
-def GETSIZE(node: metta_parser.SyntaxNode) -> int:
+def getSize(node: metta_ast_parser.SyntaxNode) -> int:
     """Gets the size of a node based on its source text length."""
     start, end = node.src_range
     return end - start
 
-def CHUNKNODES(nodes: List[metta_parser.SyntaxNode], source_code: str, max_size: int) -> List[str]:
-    """Chunks a list of sibling nodes."""
+def ChunkPreprocessedCode(potential_chunks, max_size: int, db: DB, source_code: str) -> List[str]:
+    """Chunks a list of potential chunks based on max_size.
+    Each potential chunk is a list of text_node table IDs from our db.
+    Returns a list of chunked code strings.
+    """
     chunks = []
-    current_chunk_nodes, current_size = [], 0
-    
-    for node in nodes:
-        node_size = GETSIZE(node)
-        
-        # Condition where adding to the current chunk would exceed max_size
-        if current_chunk_nodes and (current_size + node_size) > max_size:
-            # Combine node texts to form the chunk content
-            start_char = current_chunk_nodes[0].src_range[0]
-            end_char = current_chunk_nodes[-1].src_range[1]
-            chunks.append(source_code[start_char:end_char])
-            current_chunk_nodes, current_size = [], 0
 
-        # If the node itself is too large, recursively chunk its children
-        if node_size > max_size:
-            if current_chunk_nodes:
-                start_char = current_chunk_nodes[0].src_range[0]
-                end_char = current_chunk_nodes[-1].src_range[1]
-                chunks.append(source_code[start_char:end_char])
-                current_chunk_nodes, current_size = [], 0
-
-            subchunks = CHUNKNODES(node.sub_nodes, source_code, max_size)
-            chunks.extend(subchunks)
-        # If the node fits, add it to the current chunk
-        else:
-            current_chunk_nodes.append(node)
-            current_size += node_size
+    for chunk_ids in potential_chunks:
+        chunk, chunk_size = [], 0
+        for chunk_id in chunk_ids:
+            text_range = db.get_text_node(chunk_id)[1]
+            text_node = source_code[text_range[0]:text_range[1]]
+            text_size = len(text_node)
             
-    # Add the last remaining chunk if it exists
-    if current_chunk_nodes:
-        start_char = current_chunk_nodes[0].src_range[0]
-        end_char = current_chunk_nodes[-1].src_range[1]
-        chunks.append(source_code[start_char:end_char])
-        
+            # when single text node is larger than max_size
+            if text_size > max_size:
+                if chunk:
+                    chunks.append("\n".join(chunk))
+                    chunk, chunk_size = [], 0
+                # recursively split this big single node
+                nodes = metta_ast_parser.parse(text_node)[0]
+                subChunks = ChunkCodeRecursively(nodes, text_node, max_size)
+                chunks.extend(subChunks)
+
+            # when adding this text node exceeds max_size
+            elif chunk_size + text_size > max_size:
+                if chunk:
+                    chunks.append("\n".join(chunk))
+                chunk, chunk_size = [], 0
+            else:
+                chunk.append(text_node)
+                chunk_size += text_size
+
+        if chunk:
+            chunks.append("\n".join(chunk))
+
     return chunks
 
-def CHUNKCODE(code: str, max_size: int) -> List[str]:
-    """Entry point for the chunking algorithm."""
-    # If the entire code is small enough, return it as a single chunk
-    if len(code) <= max_size:
-        return [code]
-    
-    try:
-        # The top-level nodes are the children of the whole "file"
-        tree_children = metta_parser.parse(code)
-        return CHUNKNODES(tree_children, code, max_size)
-    except ValueError as e:
-        print(f"Error parsing MeTTa code: {e}")
-        return []
+def ChunkCode(code: str, max_size: int) -> List[str]:
+    """
+    Chunks the code into smaller pieces based on the max_size.
+    Stores the chunks in the database.
+    """
+
+    load_dotenv() 
+    with psycopg.connect(os.getenv("POSTGRES_URL")) as conn:    
+        db = DB(conn)
+        db.recreate_schema()
+        db.clear_text_nodes()
+        db.clear_symbols()
+        
+        # for now lets pass the code to the chunker
+        # later we can add a feature to fetch the source code from the db using the file_path
+        potential_chunks = preprocess_code(code, "temp_path", db)
+        chunks = ChunkPreprocessedCode(potential_chunks, max_size, db, code)
+        ids = db.insert_chunks(chunks)
+        return chunks
+
+def ChunkCodeRecursively(node: metta_ast_parser.SyntaxNode ,text: str, max_size: int) -> list[str]:
+    """Recursively chunks a potential chunk (syntax node) when it exceeds max_size."""
+    if getSize(node) <= max_size:
+        st, en = node.src_range
+        return [text[st:en]]
+
+    # No children to recurse into, accept oversized node
+    if not node.sub_nodes:  
+        st, en = node.src_range
+        return [text[st:en]]
+
+    chunks = []
+    for sub_node in node.sub_nodes:
+        sub_chunks = ChunkCodeRecursively(sub_node, text, max_size)
+        if chunks and len(chunks[-1]) + len(sub_chunks[0]) <= max_size:
+                chunks[-1] += "\n" + sub_chunks[0]
+                sub_chunks = sub_chunks[1:]
+
+        chunks.extend(sub_chunks)
+    return chunks
 
 
 def main():
@@ -80,18 +111,9 @@ def main():
         return
 
     print(f"Chunking code with MAX_SIZE = {args.max_size}...")
-    final_chunks = CHUNKCODE(source_code, args.max_size)
-    
-    print(f"Generated {len(final_chunks)} chunks. Writing to '{args.output_file}'...")
-    try:
-        with open(args.output_file, 'w', encoding='utf-8') as f:
-            for i, chunk in enumerate(final_chunks):
-                f.write(f"--- CHUNK {i+1} (Size: {len(chunk)}) ---\n\n")
-                f.write(chunk.strip() + "\n\n")
-    except IOError as e:
-        print(f"Error writing to file '{args.output_file}': {e}")
-        return
-
+    final_chunks = ChunkCode(source_code, args.max_size)
+    print(final_chunks)
+    print("Chunks Stored in database")
     print("Chunking complete!")
 
 if __name__ == "__main__":
