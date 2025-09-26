@@ -3,7 +3,9 @@ import os
 from pymongo import MongoClient
 from pydantic import BaseModel, Field
 from typing import Literal
-
+from uuid import uuid4
+from typing import List
+from pymongo.errors import BulkWriteError
 
 load_dotenv(find_dotenv()) 
 
@@ -13,7 +15,7 @@ client = MongoClient(conn)
 db = client["chunkDB"]
 chunks_collection = db["chunks"]
 
-
+# Set up MongoDB schema/collections for chunks and metadata.
 class ChunkSchema(BaseModel):
     chunkId: str 
     source: Literal["code", "specification", "documentation"]
@@ -24,3 +26,45 @@ class ChunkSchema(BaseModel):
     file: str
     version: str
     isEmbedded: bool = False
+
+# Function to insert a single chunk into the MongoDB collection with validation.
+def insert_chunk(chunk_data: dict):
+    """
+    Insert a single chunk.
+    Returns inserted ID.
+    """
+    chunk = ChunkSchema(**chunk_data)
+    # Check if chunkId already exists
+    if chunks_collection.find_one({"chunkId": chunk.chunkId}):
+        print(f"Chunk with chunkId '{chunk.chunkId}' already exists.")
+        return None
+    chunks_collection.insert_one(chunk.model_dump())
+    return chunk.chunkId
+
+# Function to insert many chunks into the MongoDB collection with validation.
+def insert_chunks(chunks_data: list):
+    """
+    Insert multiple chunks.
+    """
+    valid_chunks = []
+    for chunk_data in chunks_data:
+        try:
+            chunk = ChunkSchema(**chunk_data)
+            # Check if already exists
+            if not chunks_collection.find_one({"chunkId": chunk.chunkId}):
+                valid_chunks.append(chunk.model_dump())
+            else:
+                print(f"Skipping duplicate chunkId: {chunk.chunkId}")
+        except Exception as e:
+            print("Validation error:", e)
+
+    if not valid_chunks:
+        return []
+
+    try:
+        chunks_collection.insert_many(valid_chunks, ordered=False)
+    except BulkWriteError as e:
+        print("Some duplicates were skipped.", e.details)
+
+    # Return inserted chunkIds
+    return [chunk["chunkId"] for chunk in valid_chunks]
