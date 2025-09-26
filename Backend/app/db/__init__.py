@@ -68,3 +68,21 @@ def insert_chunks(chunks_data: list):
 
     # Return inserted chunkIds
     return [chunk["chunkId"] for chunk in valid_chunks]
+
+
+# Function to retrieve  chunks by ChunkId from the MongoDB collection.
+def get_chunk_by_id(chunk_id: str):
+    """ 
+    Retrieve a chunk by its ID.
+    """
+    return chunks_collection.find_one({"chunkId": chunk_id})
+
+# Function to retrieve all chunks from the MongoDB collection.
+def get_chunks(filter_query: dict = None, limit: int = 10):
+    """
+    Retrieve multiple chunks matching the filter.
+    Returns a list of dictionaries.
+    """
+    filter_query = filter_query or {}  # If no filter is given, get all
+    cursor = chunks_collection.find(filter_query, {"_id": 0}).limit(limit)
+    return list(cursor)
