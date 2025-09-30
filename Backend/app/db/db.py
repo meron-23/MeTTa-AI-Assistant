@@ -13,8 +13,7 @@ from pymongo.errors import BulkWriteError
 load_dotenv(find_dotenv())
 MONGO_URI = os.getenv("MONGO_URI")
 
-# Initialize FastAPI and MongoDB client
-app = FastAPI(title="Chunk Management API")
+
 
 # Async MongoDB client setup
 client = AsyncMongoClient(MONGO_URI)
