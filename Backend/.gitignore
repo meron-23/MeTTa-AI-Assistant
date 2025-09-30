@@ -31,5 +31,5 @@ build/
 !.env.example
 
 temp/
-*.json
+metta_index.json
 data/
