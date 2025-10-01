@@ -2,13 +2,18 @@
 services:
   api:
     build: .
+    command: python -m app.run
     ports:
       - "8000:8000"
+    volumes:
+      - ./:/app
     depends_on:
       - qdrant
       - mongo
     env_file:
       - .env
+    environment:
+      - LOG_DIR=/app/logs
 
   qdrant:
     image: qdrant/qdrant:v1.7.3

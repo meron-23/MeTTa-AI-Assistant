@@ -5,6 +5,10 @@ __pycache__/
 *.pyd
 *.so
 
+# logs
+logs/
+*.log
+
 # Virtual environments
 .env
 .venv/
