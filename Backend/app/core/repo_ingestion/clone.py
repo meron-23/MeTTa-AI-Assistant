@@ -2,12 +2,13 @@ import os
 import subprocess
 from urllib.parse import urlparse
 from loguru import logger
+from typing import List
 
-def get_repo_name(repo_url):
+def get_repo_name(repo_url: str) -> str:
     """Extract repo name from URL, e.g. metta-moses.git → metta-moses"""
     return os.path.splitext(os.path.basename(urlparse(repo_url).path))[0]
 
-def clone_repo(repo_url, temp_dir):
+def clone_repo(repo_url: str, temp_dir: str) -> str:
     repo_name = get_repo_name(repo_url)
     repo_path = os.path.join(temp_dir, repo_name)
 
@@ -18,3 +19,10 @@ def clone_repo(repo_url, temp_dir):
     subprocess.run(["git", "clone", repo_url, repo_path], check=True)
 
     return repo_path
+
+def get_all_files(repo_dir: str) -> List[str]:
+    return [
+        os.path.join(root, file)
+        for root, _, files in os.walk(repo_dir)
+        for file in files
+    ]
