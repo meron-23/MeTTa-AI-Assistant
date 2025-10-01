@@ -1,7 +1,7 @@
 import os
 import subprocess
 from urllib.parse import urlparse
-from logger import logger
+from loguru import logger
 
 def get_repo_name(repo_url):
     """Extract repo name from URL, e.g. metta-moses.git → metta-moses"""

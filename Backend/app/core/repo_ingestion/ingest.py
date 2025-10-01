@@ -3,7 +3,7 @@ from clone import clone_repo
 from traverse import get_all_files
 from filters import process_metta_files
 from config import TEMP_DIR, DATA_DIR
-from logger import logger
+from loguru import logger
 
 def ingest_pipeline(repo_url):
     repo_path = clone_repo(repo_url, TEMP_DIR)

@@ -2,7 +2,7 @@ import os
 import hashlib
 import json
 import shutil
-from logger import logger
+from loguru import logger
 
 def hash_file_content(filepath):
     h = hashlib.sha256()
