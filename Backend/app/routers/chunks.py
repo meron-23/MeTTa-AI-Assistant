@@ -1,7 +1,7 @@
-from fastapi import APIRouter, HTTPException, status, Depends
-from typing import Optional, Dict, Any
+from fastapi import APIRouter, HTTPException, status, Depends, Query
+from typing import Optional, Dict, Any, List
 from pydantic import BaseModel
-from app.db.db import update_chunk, delete_chunk, get_chunk_by_id, ChunkSchema
+from app.db.db import update_chunk, delete_chunk, get_chunk_by_id, get_chunks, ChunkSchema
 from bson import ObjectId
 
 router = APIRouter(
@@ -72,3 +72,34 @@ async def delete_chunk_endpoint(chunk_id: str):
         )
     
     return None
+
+@router.get("/", response_model=List[Dict[str, Any]])
+async def list_chunks(
+    project: Optional[str] = None,
+    repo: Optional[str] = None,
+    section: Optional[str] = None,
+    limit: int = Query(100, ge=1, le=1000, description="Limit the number of results (1-1000)"),
+):
+    """
+    List all chunks with optional filtering.
+    
+    - **project**: Filter by project name
+    - **repo**: Filter by repository name
+    - **section**: Filter by section name
+    - **limit**: Number of results to return (1-1000)
+    """
+    filter_query = {}
+    if project:
+        filter_query["project"] = project
+    if repo:
+        filter_query["repo"] = repo
+    if section:
+        filter_query["section"] = section
+    
+    try:
+        return await get_chunks(filter_query=filter_query, limit=limit)
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error retrieving chunks: {str(e)}"
+        )
