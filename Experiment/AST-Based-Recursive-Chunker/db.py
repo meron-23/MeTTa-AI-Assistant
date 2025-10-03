@@ -1,177 +1,108 @@
+from pymongo import AsyncMongoClient
+
 class Database:
-    def __init__(self, conn):
-        self.conn = conn
+    def __init__(self,url,db_name="MeTTa_chunks"):
+        self.client = AsyncMongoClient(url)
+        self.db = self.client.get_database(db_name)
 
-    def create_tables(self):
-        """Create tables from schema if they don't exist."""
-
-        schema = ["""
-        CREATE TABLE IF NOT EXISTS text_nodes (
-            id SERIAL PRIMARY KEY,
-            text_range INTEGER[2] NOT NULL,
-            file_path TEXT NOT NULL,
-            node_type TEXT NOT NULL
-        );""",
-        """
-        CREATE TABLE IF NOT EXISTS symbols (
-            id SERIAL PRIMARY KEY,
-            name TEXT NOT NULL,
-            defs INTEGER[],
-            calls INTEGER[],
-            asserts INTEGER[],
-            types INTEGER[]
-        );""",
-        """
-        CREATE TABLE IF NOT EXISTS chunks (
-            id SERIAL PRIMARY KEY,
-            chunk_text TEXT NOT NULL
-        );
-        """]
-
-        with self.conn.cursor() as cur:
-            for stmt in schema:
-                cur.execute(stmt)
-            self.conn.commit()
+        # get collections
+        self.text_nodes = self.db["text_nodes"]
+        self.symbols = self.db["symbols"]
+        self.chunks = self.db["chunks"]
     
-    def drop_all_tables(self):
-        """Only for development: drop all project tables."""
-        with self.conn.cursor() as cur:
-            cur.execute("DROP TABLE IF EXISTS chunks, symbols, text_nodes CASCADE;")
-        self.conn.commit()
+    async def clear_text_nodes_symbols(self):
+        """
+        clear these collections after a function scope is processed
+        to avoid duplicate key errors on processing same function names 
+        in different scopes
+        """
+        await self.text_nodes.delete_many({})
+        await self.symbols.delete_many({})
+    
+    async def clear_all_collections(self):
+        """Clear all collections development only."""
+        await self.text_nodes.delete_many({})
+        await self.symbols.delete_many({})
+        await self.chunks.delete_many({})
 
-    def recreate_schema(self):
-        """Only for development: drop all tables and recreate schema."""
-        self.drop_all_tables()
-        self.create_tables()
-
-    # ----------------------------
+    async def close(self):
+        await self.client.close()
+    
+    #----------------------------
     # TEXT_NODES CRUD
-    # ----------------------------
-    def insert_text_node(self, text, file_path, node_type):
-        """Insert a new text_node row."""
+    #----------------------------
+    async def insert_text_node(self, text_range: tuple[int, int], file_path: str, node_type: str) -> int:
+        """Insert a new text_node document."""
+        doc = {
+            "text_range": text_range,
+            "file_path": file_path,
+            "node_type": node_type
+        }
+        result = await self.text_nodes.insert_one(doc)
+        return result.inserted_id
 
-        with self.conn.cursor() as cur:
-            cur.execute(
-                "INSERT INTO text_nodes (text_range, file_path, node_type) VALUES (%s, %s, %s) RETURNING id",
-                (text, file_path, node_type),
-            )
-            node_id = cur.fetchone()[0]
-            self.conn.commit()
-            return node_id
+    async def get_text_node(self, node_id: int):
+        """Fetch a text_node document by ID."""
+        result = await self.text_nodes.find_one({"_id": node_id})
+        if result:
+            return result
+        return "Text node not found"
 
-    def get_text_node(self, node_id):
-        """Fetch a text_node row by ID."""
-
-        with self.conn.cursor() as cur:
-            cur.execute("SELECT * FROM text_nodes WHERE id = %s", (node_id,))
-            return cur.fetchone()
-    
-    def clear_text_nodes(self):
-        """Delete all rows from the text_nodes table."""
-
-        with self.conn.cursor() as cur:
-            cur.execute("DELETE FROM text_nodes")
-            self.conn.commit()
-
-    # ----------------------------
+    #----------------------------
     # SYMBOLS CRUD
-    # ----------------------------
-    def upsert_symbol(self, name, col, node_id):
+    #----------------------------
+    async def upsert_symbol(self, name: str, col: str, node_id: int):
         """Add a node_id to the given symbol's column (defs, calls, asserts, types)."""
+        update = {"$addToSet": {col: node_id}}
+        result = await self.symbols.update_one({"name": name}, update, upsert=True)
+        return result.upserted_id if result.upserted_id else None
 
-        with self.conn.cursor() as cur:
-            # Check if symbol exists
-            cur.execute("SELECT id FROM symbols WHERE name = %s", (name,))
-            row = cur.fetchone()
-
-            if row:
-                # Update array by appending
-                query = f"UPDATE symbols SET {col} = array_append({col}, %s) WHERE name = %s"
-                cur.execute(query, (node_id, name))
-            else:
-                # Insert with only one array populated
-                col_dict = {
-                    "defs": "ARRAY[]::integer[]",
-                    "calls": "ARRAY[]::integer[]",
-                    "asserts": "ARRAY[]::integer[]",
-                    "types": "ARRAY[]::integer[]"
-                }
-                col_dict[col] = f"ARRAY[{node_id}]"
-                cur.execute(
-                    f"INSERT INTO symbols (name, defs, calls, asserts, types) VALUES (%s, {col_dict['defs']}, {col_dict['calls']}, {col_dict['asserts']}, {col_dict['types']})",
-                    (name,),
-                )
-            self.conn.commit()
-
-    def get_symbol(self, name):
-        """Fetch a symbol row by name."""
-
-        with self.conn.cursor() as cur:
-            cur.execute("SELECT * FROM symbols WHERE name = %s", (name,))
-            return cur.fetchone()
-        
-        self.conn.commit()
+    async def get_symbol(self, name: str):
+        """Fetch a symbol document by name."""
+        result = await self.symbols.find_one({"name": name})
+        if result:
+            return result
+        return "Symbol not found"
     
-    def get_all_symbols(self):
-        """Return all rows from the symbols table."""
-
-        with self.conn.cursor() as cur:
-            cur.execute("SELECT * FROM symbols")
-            return cur.fetchall()
-
-    def clear_symbols(self):
-        """Delete all rows from the symbols table."""
-
-        with self.conn.cursor() as cur:
-            cur.execute("DELETE FROM symbols")
-            self.conn.commit()
+    async def get_all_symbols(self):
+        """Return all documents from the symbols collection."""
+        results = []
+        async for doc in self.symbols.find({}):
+            results.append(doc)
+        return results
     
-
-    # ----------------------------
+    #----------------------------
     # CHUNKS CRUD
-    # ----------------------------
-    def insert_chunk(self, chunk_text):
-        """Insert a single chunk_text row. Returns the inserted ID."""
-
-        with self.conn.cursor() as cur:
-            cur.execute(
-                "INSERT INTO chunks (chunk_text) VALUES (%s) RETURNING id",
-                (chunk_text,),
-            )
-            chunk_id = cur.fetchone()[0]
-            self.conn.commit()
-            return chunk_id
+    #----------------------------
+    async def insert_chunk(self, chunk_text: str) -> int:
+        """Insert a single chunk_text document. Returns the inserted ID."""
+        doc = {
+            "chunk_text": chunk_text
+        }
+        result = await self.chunks.insert_one(doc)
+        return result.inserted_id
     
-    def insert_chunks(self, chunk_texts):
+    async def insert_chunks(self, chunk_texts: list[str]) -> list[int]:
         """
-        Insert multiple chunk_text rows at once.
+        Insert multiple chunk_text documents at once.
         Returns a list of inserted IDs in the same order as input.
         """
         if not chunk_texts:
             return []
-        with self.conn.cursor() as cur:
-            cur.execute(
-                """
-                INSERT INTO chunks (chunk_text)
-                SELECT unnest(%s::text[])
-                RETURNING id
-                """,
-                (chunk_texts,),
-            )
-            ids = [row[0] for row in cur.fetchall()]
-            self.conn.commit()
-            return ids
+        docs = [{"chunk_text": text} for text in chunk_texts]
+        result = await self.chunks.insert_many(docs)
+        return result.inserted_ids
 
-    def get_chunk(self, chunk_id):
-        """Fetch a chunk row by ID."""
+    async def get_chunk(self, chunk_id: int):
+        """Fetch a chunk document by ID."""
+        result = await self.chunks.find_one({"_id": chunk_id})
+        if result:
+            return result
+        return "Chunk not found"
 
-        with self.conn.cursor() as cur:
-            cur.execute("SELECT * FROM chunks WHERE id = %s", (chunk_id,))
-            return cur.fetchone()
-    
-    def get_all_chunks(self):
-        """Return all rows from the chunks table."""
-
-        with self.conn.cursor() as cur:
-            cur.execute("SELECT * FROM chunks")
-            return cur.fetchall()
+    async def get_all_chunks(self):
+        """Return all documents from the chunks collection."""
+        results = []
+        async for doc in self.chunks.find({}):
+            results.append(doc)
+        return results

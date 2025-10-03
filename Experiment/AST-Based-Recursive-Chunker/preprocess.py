@@ -3,7 +3,7 @@ import metta_ast_parser
 from db import Database 
 
 # take the src code return the potential chunks retrieved from the symbol index table
-def preprocess_code(source_code: str, filepath: str, db: Database) -> str:
+async def preprocess_code(source_code: str, filepath: str, db: Database) -> str:
     tree = metta_ast_parser.parse(source_code)
 
     for idx,node in enumerate(tree):
@@ -21,18 +21,20 @@ def preprocess_code(source_code: str, filepath: str, db: Database) -> str:
         
         # insert text_node
         st, end = node.src_range
-        node_id = db.insert_text_node([st, end], filepath, node.node_type_str)
+        node_id = await db.insert_text_node([st, end], filepath, node.node_type_str)
 
         # insert symbol
-        db.upsert_symbol(head_symbol["symbol"], head_symbol["type"] + "s", node_id)
+        await db.upsert_symbol(head_symbol["symbol"], head_symbol["type"] + "s", node_id)
 
     # fetch all symbols
-    rows = db.get_all_symbols()
+    rows = await db.get_all_symbols()
 
     potential_chunks = []
+
     for row in rows:
         single_chunk = []
-        for ids in row[2:]:
+        values = list(row.values())
+        for ids in values[2:]:
             single_chunk.extend(ids)
         potential_chunks.append(single_chunk)
 
