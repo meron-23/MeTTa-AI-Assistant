@@ -57,8 +57,8 @@ async def insert_chunks(
         except Exception as e:
             print("Validation error:", e)
 
-    if not valid_chunks:
-        return []
+        if not valid_chunks:
+            return []
 
     # Insert many
     try:
@@ -70,8 +70,8 @@ async def insert_chunks(
         # Extract inserted ids if available
         inserted_ids = [item["op"]["chunkId"] for item in inserted_ids if "op" in item and "chunkId" in item["op"]]
 
-    # Return list of inserted chunkIds
-    return [chunk["chunkId"] for chunk in valid_chunks]
+        # Return list of inserted chunkIds
+        return [chunk["chunkId"] for chunk in valid_chunks]
 
 
 # Function to retrieve  chunks by ChunkId from the MongoDB collection.
