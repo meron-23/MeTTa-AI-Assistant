@@ -18,3 +18,30 @@ def init_qdrant_collection(qdrant, model_dim: int):
         print(f"Collection '{COLLECTION_NAME}' created!")
     else:
         print(f"Collection '{COLLECTION_NAME}' already exists.")
+
+#enable metadata indexing
+def setup_metadata_indexes(qdrant):
+    metadata_fields = {
+        "chunkId": PayloadSchemaType.KEYWORD,
+        "project": PayloadSchemaType.KEYWORD,
+        "repo": PayloadSchemaType.KEYWORD,
+        "file": PayloadSchemaType.KEYWORD,
+        "section": PayloadSchemaType.KEYWORD,
+        "version": PayloadSchemaType.KEYWORD,
+        "source": PayloadSchemaType.KEYWORD,
+        
+    }
+
+    for field, schema in metadata_fields.items():
+        try:
+            qdrant.create_payload_index(
+                collection_name=COLLECTION_NAME,
+                field_name=field,
+                field_schema=schema,
+            )
+            print(f" Created metadata index for '{field}'")
+        except Exception as e:
+            if "already exists" in str(e):
+                print(f"Index for '{field}' already exists")
+            else:
+                print(f"Failed to create index for '{field}': {e}")
