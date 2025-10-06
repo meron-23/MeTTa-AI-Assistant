@@ -2,7 +2,7 @@ from fastapi import APIRouter, HTTPException, status, Depends, Query
 from typing import Optional, Dict, Any, List
 from pydantic import BaseModel
 from app.db.db import update_chunk, delete_chunk, get_chunk_by_id, get_chunks, ChunkSchema
-from bson import ObjectId
+from app.dependencies import get_mongo_db
 
 router = APIRouter(
     prefix="/api/chunks",
@@ -21,7 +21,9 @@ class ChunkUpdate(BaseModel):
     isEmbedded: Optional[bool] = None
 
 @router.patch("/{chunk_id}", response_model=Dict[str, Any])
-async def update_chunk_endpoint(chunk_id: str, chunk_update: ChunkUpdate):
+async def update_chunk_endpoint(
+    chunk_id: str, chunk_update: ChunkUpdate, mongo_db=Depends(get_mongo_db)
+):
     """
     Update a chunk by its ID.
     Only the fields provided in the request body will be updated.
@@ -34,43 +36,42 @@ async def update_chunk_endpoint(chunk_id: str, chunk_update: ChunkUpdate):
             detail="No update data provided"
         )
     
-    existing_chunk = await get_chunk_by_id(chunk_id)
+    existing_chunk = await get_chunk_by_id(chunk_id, mongo_db=mongo_db)
     if not existing_chunk:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Chunk with ID {chunk_id} not found"
         )
-    
 
-    updated_count = await update_chunk(chunk_id, update_data)
+    updated_count = await update_chunk(chunk_id, update_data, mongo_db=mongo_db)
     if updated_count == 0:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to update chunk"
         )
-    
-    updated_chunk = await get_chunk_by_id(chunk_id)
+
+    updated_chunk = await get_chunk_by_id(chunk_id, mongo_db=mongo_db)
     return {"message": "Chunk updated successfully", "chunk": updated_chunk}
 
 @router.delete("/{chunk_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_chunk_endpoint(chunk_id: str):
+async def delete_chunk_endpoint(chunk_id: str, mongo_db=Depends(get_mongo_db)):
     """
     Delete a chunk by its ID.
     """
-    existing_chunk = await get_chunk_by_id(chunk_id)
+    existing_chunk = await get_chunk_by_id(chunk_id, mongo_db=mongo_db)
     if not existing_chunk:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Chunk with ID {chunk_id} not found"
         )
-    
-    deleted_count = await delete_chunk(chunk_id)
+
+    deleted_count = await delete_chunk(chunk_id, mongo_db=mongo_db)
     if deleted_count == 0:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to delete chunk"
         )
-    
+
     return None
 
 @router.get("/", response_model=List[Dict[str, Any]])
@@ -79,6 +80,7 @@ async def list_chunks(
     repo: Optional[str] = None,
     section: Optional[str] = None,
     limit: int = Query(100, ge=1, le=1000, description="Limit the number of results (1-1000)"),
+    mongo_db=Depends(get_mongo_db),
 ):
     """
     List all chunks with optional filtering.
@@ -97,7 +99,9 @@ async def list_chunks(
         filter_query["section"] = section
     
     try:
-        return await get_chunks(filter_query=filter_query, limit=limit)
+        return await get_chunks(
+            filter_query=filter_query, limit=limit, mongo_db=mongo_db
+        )
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
