@@ -6,18 +6,43 @@ from typing import AsyncIterator, Dict
 from app.routers import chunks
 from pymongo import AsyncMongoClient
 import os
+from pymongo.errors import PyMongoError
+from dotenv import load_dotenv
 
+load_dotenv()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     logger.info("Application has started")
     mongo_uri = os.getenv("MONGO_URI")
+    if not mongo_uri:
+        logger.error("MONGO_URI is not set. Please set the MONGO_URI environment variable.")
+        raise RuntimeError("MONGO_URI environment variable is required")
+
     app.state.mongo_client = AsyncMongoClient(mongo_uri)
     app.state.mongo_db = app.state.mongo_client["chunkDB"]
+
+    # Validate connection by issuing a ping. If ping fails, close the client and stop startup.
+    try:
+        await app.state.mongo_db.command({"ping": 1})
+        logger.info("Successfully connected to MongoDB")
+    except PyMongoError as e:
+        logger.exception("Failed to connect to MongoDB: {}", e)
+        try:
+            await app.state.mongo_client.close()
+        except Exception:
+            logger.exception("Error while closing MongoDB client after failed connect")
+        raise RuntimeError("Unable to connect to MongoDB") from e
+
     try:
         yield
     finally:
-        await app.state.mongo_client.close()
+        try:
+            await app.state.mongo_client.close()
+            logger.info("MongoDB client closed")
+        except Exception:
+            logger.exception("Error closing MongoDB client during shutdown")
+
     logger.info("Application shutting down .....")
 
 app = FastAPI(lifespan=lifespan)

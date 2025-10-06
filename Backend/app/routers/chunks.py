@@ -3,6 +3,7 @@ from typing import Optional, Dict, Any, List
 from pydantic import BaseModel
 from app.db.db import update_chunk, delete_chunk, get_chunk_by_id, get_chunks, ChunkSchema
 from app.dependencies import get_mongo_db
+from pymongo.database import Database
 
 router = APIRouter(
     prefix="/api/chunks",
@@ -22,7 +23,7 @@ class ChunkUpdate(BaseModel):
 
 @router.patch("/{chunk_id}", response_model=Dict[str, Any])
 async def update_chunk_endpoint(
-    chunk_id: str, chunk_update: ChunkUpdate, mongo_db=Depends(get_mongo_db)
+    chunk_id: str, chunk_update: ChunkUpdate, mongo_db : Database =Depends(get_mongo_db)
 ):
     """
     Update a chunk by its ID.
@@ -54,7 +55,7 @@ async def update_chunk_endpoint(
     return {"message": "Chunk updated successfully", "chunk": updated_chunk}
 
 @router.delete("/{chunk_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_chunk_endpoint(chunk_id: str, mongo_db=Depends(get_mongo_db)):
+async def delete_chunk_endpoint(chunk_id: str, mongo_db : Database =Depends(get_mongo_db)):
     """
     Delete a chunk by its ID.
     """
@@ -80,7 +81,7 @@ async def list_chunks(
     repo: Optional[str] = None,
     section: Optional[str] = None,
     limit: int = Query(100, ge=1, le=1000, description="Limit the number of results (1-1000)"),
-    mongo_db=Depends(get_mongo_db),
+    mongo_db : Database =Depends(get_mongo_db),
 ):
     """
     List all chunks with optional filtering.
