@@ -1,10 +1,13 @@
+import os
+from dotenv import load_dotenv, find_dotenv
 from qdrant_client import QdrantClient
 from qdrant_client.http.models import VectorParams, Distance, PayloadSchemaType
 
 #set up Qdrant client and collection
-QDRANT_HOST = "localhost"
-QDRANT_PORT = 6333
-COLLECTION_NAME = "code_chunks"
+load_dotenv(find_dotenv())
+QDRANT_HOST = os.getenv("QDRANT_HOST")
+QDRANT_PORT = os.getenv("QDRANT_PORT")
+COLLECTION_NAME = os.getenv("COLLECTION_NAME")
 
 def get_qdrant_client():
     return QdrantClient(host=QDRANT_HOST, port=QDRANT_PORT)
