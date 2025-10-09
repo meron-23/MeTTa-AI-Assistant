@@ -1,1 +1,3 @@
 maturin
+dotenv
+pymongo
