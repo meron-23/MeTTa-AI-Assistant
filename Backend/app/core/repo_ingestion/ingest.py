@@ -1,10 +1,10 @@
 import shutil
 from loguru import logger
 from pymongo.database import Database
-from .clone import clone_repo, get_all_files
-from .filters import process_metta_files
-from .config import TEMP_DIR, DATA_DIR
-from ..chunker import chunker
+from app.core.repo_ingestion.clone import clone_repo, get_all_files
+from app.core.repo_ingestion.filters import process_metta_files
+from app.core.repo_ingestion.config import TEMP_DIR, DATA_DIR
+from app.core.chunker import chunker
 
 async def ingest_pipeline(repo_url: str, max_size: int, db: Database) -> None:
     repo_path: str = clone_repo(repo_url, TEMP_DIR)
