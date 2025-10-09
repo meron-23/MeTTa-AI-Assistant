@@ -1,9 +1,10 @@
-from fastapi import APIRouter, HTTPException, status, Depends, Query
 from typing import Optional, Dict, Any, List
 from pydantic import BaseModel
-from app.db.db import update_chunk, delete_chunk, get_chunk_by_id, get_chunks, ChunkSchema
-from app.dependencies import get_mongo_db
 from pymongo.database import Database
+from fastapi import APIRouter, HTTPException, status, Depends, Query
+from ..core.repo_ingestion.ingest import ingest_pipeline
+from app.db.db import update_chunk, delete_chunk, get_chunk_by_id, get_chunks
+from app.dependencies import get_mongo_db
 
 router = APIRouter(
     prefix="/api/chunks",
@@ -16,10 +17,27 @@ class ChunkUpdate(BaseModel):
     chunk: Optional[str] = None
     project: Optional[str] = None
     repo: Optional[str] = None
-    section: Optional[str] = None
-    file: Optional[str] = None
+    section: Optional[list[str]] = None
+    file: Optional[list[str]] = None
     version: Optional[str] = None
     isEmbedded: Optional[bool] = None
+
+# chunk repository
+@router.post("/ingest", response_model=Dict[str, Any], status_code=status.HTTP_201_CREATED)
+async def ingest_repository(
+    repo_url: str, 
+    chunk_size: int = Query(1500, ge=500, le=1500), 
+    mongo_db: Database = Depends(get_mongo_db)
+):
+    """Ingest and chunk a code repository."""
+    try:
+        await ingest_pipeline(repo_url, chunk_size, mongo_db)
+        return {"message": "Repository ingested and chunked successfully"}
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error ingesting repository: {str(e)}"
+        )
 
 @router.patch("/{chunk_id}", response_model=Dict[str, Any])
 async def update_chunk_endpoint(
