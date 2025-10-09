@@ -1,34 +1,16 @@
+# app/embedding/embedding_pipeline.py
 import asyncio
 import uuid
-from model_config import get_embedding_model
-from qdrant_config import (
-    get_qdrant_client,
-    init_qdrant_collection,
-    setup_metadata_indexes,
-    COLLECTION_NAME,
-)
-from qdrant_client.models import PointStruct  # use models instead of http.models
-from db import get_chunks, update_embedding_status
-from qdrant_client import AsyncQdrantClient
+from qdrant_client.models import PointStruct
+from app.db.db import get_chunks, update_embedding_status
 
-async def embedding_pipeline(batch_size: int = 50):
-    # Load model
-    model = get_embedding_model()
-
-    # Async Qdrant client
-    qdrant: AsyncQdrantClient = await get_qdrant_client()
-
-    # Async collection initialization
-    await init_qdrant_collection(qdrant, model_dim=model.get_sentence_embedding_dimension())
-    await setup_metadata_indexes(qdrant)
-
-    # Fetch chunks from MongoDB asynchronously
-    chunks = await get_chunks({"isEmbedded": False}, limit=batch_size)
+async def embedding_pipeline(collection_name, mongo_db, model, qdrant, batch_size: int = 50):
+    """Runs the full embedding pipeline."""
+    chunks = await get_chunks({"isEmbedded": False}, limit=batch_size, mongo_db=mongo_db)
     if not chunks:
         print("No new chunks to embed.")
         return
 
-    # Prepare texts and ids
     texts, ids, valid_chunks = [], [], []
     for chunk in chunks:
         if "chunk" not in chunk or "chunkId" not in chunk:
@@ -37,10 +19,8 @@ async def embedding_pipeline(batch_size: int = 50):
         ids.append(str(uuid.uuid5(uuid.NAMESPACE_OID, chunk["chunkId"])))
         valid_chunks.append(chunk)
 
-    # Generate embeddings asynchronously
     embeddings = await asyncio.to_thread(model.encode, texts)
 
-    # Prepare points
     points = [
         PointStruct(
             id=ids[i],
@@ -53,15 +33,10 @@ async def embedding_pipeline(batch_size: int = 50):
         for i in range(len(valid_chunks))
     ]
 
-    # Async upsert into Qdrant
-    await qdrant.upsert(collection_name=COLLECTION_NAME, points=points)
+    await qdrant.upsert(collection_name=collection_name, points=points)
 
-    # Update MongoDB embedding status asynchronously
     for chunk in valid_chunks:
-        await update_embedding_status(chunk["chunkId"], True)
+        await update_embedding_status(chunk["chunkId"], True, mongo_db=mongo_db)
 
-    print(f"Inserted {len(points)} embeddings and updated MongoDB.")
+    print(f"✅ Inserted {len(points)} embeddings and updated MongoDB.")
 
-
-if __name__ == "__main__":
-    asyncio.run(embedding_pipeline())

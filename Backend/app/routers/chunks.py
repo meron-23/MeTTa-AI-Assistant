@@ -1,9 +1,11 @@
+import os
 from fastapi import APIRouter, HTTPException, status, Depends, Query
 from typing import Optional, Dict, Any, List
 from pydantic import BaseModel
 from app.db.db import update_chunk, delete_chunk, get_chunk_by_id, get_chunks, ChunkSchema
-from app.dependencies import get_mongo_db
 from pymongo.database import Database
+from app.dependencies import get_mongo_db, get_embedding_model_dep, get_qdrant_client_dep
+from app.embedding.pipeline import embedding_pipeline
 
 router = APIRouter(
     prefix="/api/chunks",
@@ -107,4 +109,33 @@ async def list_chunks(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error retrieving chunks: {str(e)}"
+        )
+
+
+@router.post("/embed", summary="Run embedding pipeline for unembedded chunks")
+async def run_embedding_pipeline(
+    mongo_db: Database = Depends(get_mongo_db),
+    model = Depends(get_embedding_model_dep),
+    qdrant = Depends(get_qdrant_client_dep)
+):
+    """Trigger the embedding pipeline."""
+    collection_name = os.getenv("COLLECTION_NAME")
+    if not collection_name:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="COLLECTION_NAME not set in environment variables."
+        )
+
+    try:
+        await embedding_pipeline(
+            collection_name=collection_name,
+            mongo_db=mongo_db,
+            model=model,
+            qdrant=qdrant
+        )
+        return {"message": "Embedding pipeline completed successfully"}
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Embedding pipeline failed: {str(e)}"
         )
