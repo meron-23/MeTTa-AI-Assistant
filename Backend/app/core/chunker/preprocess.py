@@ -1,8 +1,9 @@
-from collections import defaultdict
 import re
+from collections import defaultdict
 from typing import Any, Dict, List
+from pymongo.database import Database
 from . import metta_ast_parser 
-from ...db.db import Database 
+from ...db.db import get_all_symbols, upsert_symbol
 
 # take the src code return the potential chunks retrieved from the symbol index table
 async def preprocess_code(repo_files: defaultdict, db: Database) -> List[List[str]]:
@@ -23,7 +24,7 @@ async def preprocess_code(repo_files: defaultdict, db: Database) -> List[List[st
                 continue
     
     # fetch all symbols
-    rows = await db.get_all_symbols()
+    rows = await get_all_symbols(db)
 
     potential_chunks: List[List[str]] = []
 
@@ -55,7 +56,7 @@ async def parse_file(source_code:str, rel_path:str, db:Database) -> None:
         
         # insert symbol
         st, end = node.src_range
-        await db.upsert_symbol(head_symbol["symbol"], head_symbol["type"] + "s", [source_code[st:end],rel_path])
+        await upsert_symbol(head_symbol["symbol"], head_symbol["type"] + "s", [source_code[st:end],rel_path], db)
 
 def extract_symbol_from_node(node: metta_ast_parser.SyntaxNode, source_text: str) -> Dict[str, Any]:
     st, end = node.src_range

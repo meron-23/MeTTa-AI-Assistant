@@ -1,16 +1,16 @@
 import os
 from collections import defaultdict 
 from typing import List, Dict, Any
-from dotenv import load_dotenv,find_dotenv
+from pymongo.database import Database as DB
 from . import metta_ast_parser, preprocess, utils
-from ...db.db import Database as DB
+from ...db.db import insert_chunks, clear_symbols_index
 
 def getSize(node: metta_ast_parser.SyntaxNode) -> int:
     """Gets the size of a node based on its source text length."""
     start, end = node.src_range
     return end - start
 
-async def ChunkPreprocessedCode(potential_chunks: List[List[str]], max_size: int, db: DB) -> List[Dict[str, Any]]:
+async def ChunkPreprocessedCode(potential_chunks: List[List[str]], max_size: int) -> List[Dict[str, Any]]:
     """Chunks a list of potential chunks based on max_size.
     Each potential chunk is a list of text_node table IDs from our db.
     Returns a list of chunked code strings.
@@ -58,8 +58,8 @@ async def ChunkCode(repo_files: defaultdict, max_size: int, db: DB) -> List[Dict
     """
     
     potential_chunks = await preprocess.preprocess_code(repo_files, db)
-    chunks = await ChunkPreprocessedCode(potential_chunks, max_size, db)
-    ids = await db.insert_chunks(chunks)
+    chunks = await ChunkPreprocessedCode(potential_chunks, max_size)
+    ids = await insert_chunks(chunks, db)
     return chunks
 
 def ChunkCodeRecursively(node: metta_ast_parser.SyntaxNode, text: str, max_size: int) -> list[str]:
@@ -90,14 +90,11 @@ def ChunkCodeRecursively(node: metta_ast_parser.SyntaxNode, text: str, max_size:
     return chunks
 
 
-async def ast_based_chunker(index: Dict[str, str], max_size: int = 1500) -> None:    
-    load_dotenv(find_dotenv())
-
-    db = DB(os.getenv("MONGO_URI"))
-    await db.clear_all_collections() # "JUST FOR DEVELOPMENT"
-
+async def ast_based_chunker(index: Dict[str, str], db: DB, max_size: int = 1500) -> None:   
     # Group files by repo (can adjust this by determining scope)
-    data_dir = "app/core/repo_ingestion/data"
+    data_dir = os.path.join(os.path.dirname(__file__), "../repo_ingestion/data")
+    data_dir = os.path.abspath(data_dir)
+
     repo_files = defaultdict(list)
     for file_hash, rel_path in index.items():
         repo_name = rel_path.split('/')[0]
@@ -106,13 +103,7 @@ async def ast_based_chunker(index: Dict[str, str], max_size: int = 1500) -> None
     # pass the repo_files to chunk_code
     await ChunkCode(repo_files, max_size, db)
     # After all files in this repo are processed, reset symbol index
-    await db.clear_symbols_index()
+    await clear_symbols_index(db)
 
     print("Chunks Stored in database")
     print("Chunking complete!")
-
-if __name__ == "__main__":
-    import asyncio
-    asyncio.run(ast_based_chunker())
-
-
