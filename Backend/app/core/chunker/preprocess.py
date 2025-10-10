@@ -41,22 +41,41 @@ async def preprocess_code(repo_files: defaultdict, db: Database) -> List[List[st
 async def parse_file(source_code:str, rel_path:str, db:Database) -> None:
     tree = metta_ast_parser.parse(source_code)
 
-    for idx,node in enumerate(tree):
+    # Cache comments above a function/type/assertion 
+    # as part of that symbol's chunk
+    comment_cache = []
+
+    for node in tree:
         head_symbol = extract_symbol_from_node(node, source_code)
 
         if head_symbol["type"] == "unknown":
             continue
 
         if head_symbol["type"] == "comment":
-            head_symbol["symbol"] = f"comment_{idx}"
-            head_symbol["type"] = "def"
+            comment_cache.append(source_code[node.src_range[0]:node.src_range[1]])
+            continue  
 
         if head_symbol["symbol"] == None:
             continue
         
         # insert symbol
         st, end = node.src_range
-        await upsert_symbol(head_symbol["symbol"], head_symbol["type"] + "s", [source_code[st:end],rel_path], db)
+        # add comment above function/type/assertion
+        if comment_cache:
+            await upsert_symbol(head_symbol["symbol"], head_symbol["type"] + "s",\
+                            ["\n".join(comment_cache) + "\n" + source_code[st:end], rel_path], \
+                            db)
+        # no comment associated with function
+        else:
+            await upsert_symbol(head_symbol["symbol"], head_symbol["type"] + "s",\
+                                [source_code[st:end], rel_path], \
+                                db)
+        # clear cache
+        comment_cache = []
+    
+    # remaining comments
+    if comment_cache:
+        await upsert_symbol(f"{rel_path}_comment", "comments", ["\n".join(comment_cache), rel_path], db)
 
 def extract_symbol_from_node(node: metta_ast_parser.SyntaxNode, source_text: str) -> Dict[str, Any]:
     st, end = node.src_range
