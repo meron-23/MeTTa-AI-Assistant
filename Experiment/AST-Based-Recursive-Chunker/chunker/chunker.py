@@ -1,11 +1,17 @@
-import asyncio
 import os
+import json
+import asyncio
 import argparse
-import metta_ast_parser 
 from typing import List
-from db import Database as DB
 from dotenv import load_dotenv
+from collections import defaultdict
+import sys
+sys.path.append(os.path.dirname(os.path.dirname(__file__)))  
+from db.db import Database as DB
+from collections import defaultdict
+import metta_ast_parser 
 from preprocess import preprocess_code
+from utils import _build_chunk_doc
 
 # Recursive Chunking Algorithm (with source_code passed as an argument)
 
@@ -14,7 +20,7 @@ def getSize(node: metta_ast_parser.SyntaxNode) -> int:
     start, end = node.src_range
     return end - start
 
-async def ChunkPreprocessedCode(potential_chunks, max_size: int, db: DB, source_code: str) -> List[str]:
+async def ChunkPreprocessedCode(potential_chunks, max_size: int, db: DB, source_code: str, rel_path: str) -> List[dict]:
     """Chunks a list of potential chunks based on max_size.
     Each potential chunk is a list of text_node table IDs from our db.
     Returns a list of chunked code strings.
@@ -51,24 +57,19 @@ async def ChunkPreprocessedCode(potential_chunks, max_size: int, db: DB, source_
         if chunk:
             chunks.append("\n".join(chunk))
 
+    chunks = [ _build_chunk_doc(chunk, rel_path) for chunk in chunks if chunk != ""]
     return chunks
 
-async def ChunkCode(code: str, max_size: int) -> List[str]:
+async def ChunkCode(code: str, max_size: int, db, rel_path: str) -> List[str]:
     """
     Chunks the code into smaller pieces based on the max_size.
     Stores the chunks in the database.
     """
-
-    load_dotenv() 
-
-    db = DB(os.getenv("mongo_uri"), "MeTTa_Chunker")
-    "JUST FOR DEV"
-    await db.clear_all_collections()
     
     # for now lets pass the code to the chunker
     # later we can add a feature to fetch the source code from the db using the file_path
-    potential_chunks = await preprocess_code(code, "temp_path", db)
-    chunks = await ChunkPreprocessedCode(potential_chunks, max_size, db, code)
+    potential_chunks = await preprocess_code(code, rel_path, db)
+    chunks = await ChunkPreprocessedCode(potential_chunks, max_size, db, code, rel_path)
     ids = await db.insert_chunks(chunks)
     return chunks
 
@@ -94,25 +95,40 @@ def ChunkCodeRecursively(node: metta_ast_parser.SyntaxNode ,text: str, max_size:
     return chunks
 
 
-async def main():
-    parser = argparse.ArgumentParser(description="Chunk a MeTTa source file using an AST-based algorithm.")
-    parser.add_argument("input_file", help="Path to the input .metta file to be chunked.")
-    parser.add_argument("output_file", help="Path to the output file where chunks will be written.")
-    parser.add_argument("--max-size", type=int, default=500, help="The maximum character size for each chunk (default: 500).")
+async def main(max_size=1500):    
+    load_dotenv() 
+
+    db = DB(os.getenv("mongo_uri"), "MeTTa_Chunker")
+    await db.clear_all_collections() # "JUST FOR DEVELOPMENT"
+
+    # Load the index file mapping hashes to relative paths
+    with open("example_metta_index.json") as f:
+        index = json.load(f)
+
+    # Group files by repo (can adjust this by determining scope)
+    repo_files = defaultdict(list)
+    for file_hash, rel_path in index.items():
+        repo_name = rel_path.split('/')[0]
+        repo_files[repo_name].append((rel_path))
     
-    args = parser.parse_args()
+    for repo_name, files in repo_files.items():
+        print(f"Processing repo: {repo_name}")
+        for rel_path in files:
+            file_path = rel_path  # or your actual path
+            try:
+                with open(file_path, "r", encoding="utf-8") as f:
+                    code = f.read()
+                await ChunkCode(code, max_size,db, rel_path)
+                print(f"Processed file: {file_path}")
+            except FileNotFoundError:   
+                print(f"Error: Input file not found at '{file_path}'")
+                continue
+            except Exception as e:
+                print(f"Error processing file '{file_path}': {e}")
+                continue
+        # After all files in this repo are processed, reset symbols
+        await db.clear_text_nodes_symbols() 
 
-    print(f"Reading from '{args.input_file}'...")
-    try:
-        with open(args.input_file, 'r', encoding='utf-8') as f:
-            source_code = f.read()
-    except FileNotFoundError:
-        print(f"Error: Input file not found at '{args.input_file}'")
-        return
-
-    print(f"Chunking code with MAX_SIZE = {args.max_size}...")
-    final_chunks = await ChunkCode(source_code, args.max_size)
-    # print(final_chunks)
     print("Chunks Stored in database")
     print("Chunking complete!")
 

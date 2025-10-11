@@ -1,5 +1,6 @@
+from typing import Literal, List, Optional, Union
 from pydantic import BaseModel
-from typing import Literal, List
+from bson import ObjectId
 from pymongo.errors import BulkWriteError
 from pymongo.database import Database
 from pymongo.collection import Collection
@@ -16,8 +17,8 @@ class ChunkSchema(BaseModel):
     chunk: str
     project: str
     repo: str
-    section: str
-    file: str
+    section: list[str]
+    file: list[str]
     version: str
     isEmbedded: bool = False
 
@@ -28,7 +29,12 @@ async def insert_chunk(chunk_data: dict, mongo_db: Database = None) -> str | Non
     Returns inserted ID.
     """
     collection = _get_collection(mongo_db, "chunks")
-    chunk = ChunkSchema(**chunk_data)
+    try: 
+        chunk = ChunkSchema(**chunk_data)
+    except Exception as e:
+        print("Validation error:", e)
+        return None
+    
     if await collection.find_one({"chunkId": chunk.chunkId}):
         print(f"Chunk with chunkId '{chunk.chunkId}' already exists.")
         return None
@@ -57,8 +63,8 @@ async def insert_chunks(
         except Exception as e:
             print("Validation error:", e)
 
-    if not valid_chunks:
-        return []
+        if not valid_chunks:
+            return []
 
     # Insert many
     try:
@@ -70,8 +76,8 @@ async def insert_chunks(
         # Extract inserted ids if available
         inserted_ids = [item["op"]["chunkId"] for item in inserted_ids if "op" in item and "chunkId" in item["op"]]
 
-    # Return list of inserted chunkIds
-    return [chunk["chunkId"] for chunk in valid_chunks]
+        # Return list of inserted chunkIds
+        return [chunk["chunkId"] for chunk in valid_chunks]
 
 
 # Function to retrieve  chunks by ChunkId from the MongoDB collection.
@@ -142,3 +148,38 @@ async def delete_chunk(chunk_id: str, mongo_db: Database = None) -> int:
     collection = _get_collection(mongo_db, "chunks")
     result = await collection.delete_one({"chunkId": chunk_id})
     return result.deleted_count
+
+# ----------------------------------'
+# SYMBOLS CRUD
+# ----------------------------------
+async def upsert_symbol(name: str, col: str, code: str, mongo_db: Database = None) -> Optional[ObjectId]:
+    """Add a node_id to the given symbol's column (defs, calls, asserts, types)."""
+    symbols_collection = _get_collection(mongo_db, "symbols")
+    update = {"$addToSet": {col: code}}
+    result = await symbols_collection.update_one({"name": name}, update, upsert=True)
+    return result.upserted_id if result.upserted_id else None
+
+async def get_symbol(name: str, mongo_db: Database = None) -> Union[dict, str]:
+    """Fetch a symbol document by name."""
+    symbols_collection = _get_collection(mongo_db, "symbols")
+    result = await symbols_collection.find_one({"name": name})
+    if result:
+        return result
+    return "Symbol not found"
+
+async def get_all_symbols(mongo_db: Database = None) -> List[dict]:
+    """Return all documents from the symbols collection."""
+    symbols_collection = _get_collection(mongo_db, "symbols")
+    results = []
+    async for doc in symbols_collection.find({}):
+        results.append(doc)
+    return results
+
+async def clear_symbols_index(mongo_db: Database = None) -> None:
+        """
+        clear these collections after a function scope is processed
+        to avoid duplicate key errors on processing same function names 
+        in different scopes
+        """
+        symbols_collection = _get_collection(mongo_db, "symbols")
+        await symbols_collection.delete_many({})
