@@ -13,14 +13,26 @@ def _get_collection(mongo_db: Database, name: str) -> Collection:
 # Set up MongoDB schema/collections for chunks and metadata.
 class ChunkSchema(BaseModel):
     chunkId: str
-    source: Literal["code", "specification", "documentation"]
+    source: Literal["code", "documentation", "others"]
     chunk: str
-    project: str
-    repo: str
-    section: list[str]
-    file: list[str]
-    version: str
     isEmbedded: bool = False
+
+    # Code-specific fields (optional)
+    project: Optional[str] = None
+    repo: Optional[str] = None
+    section: Optional[List[str]] = None
+    file: Optional[List[str]] = None
+    version: Optional[str] = None
+
+    # Documentation-specific fields (optional)
+    url: Optional[str] = None
+    page_title: Optional[str] = None
+    category: Optional[str] = None
+
+    # PDF-specific fields (optional)
+    filename: Optional[str] = None
+    page_numbers: Optional[List[int]] = None
+
 
 # Function to insert a single chunk into the MongoDB collection with validation.
 async def insert_chunk(chunk_data: dict, mongo_db: Database = None) -> str | None:
