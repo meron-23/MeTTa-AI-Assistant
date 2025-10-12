@@ -1,6 +1,6 @@
 from qdrant_client import AsyncQdrantClient
 from qdrant_client.http.models import PayloadSchemaType
-
+from loguru import logger
 async def setup_metadata_indexes(qdrant_client: AsyncQdrantClient, collection_name: str):
     metadata_fields = {
         "chunkId": PayloadSchemaType.KEYWORD,
@@ -19,9 +19,9 @@ async def setup_metadata_indexes(qdrant_client: AsyncQdrantClient, collection_na
                 field_name=field,
                 field_schema=schema,
             )
-            print(f"Metadata index created for '{field}'")
+            logger.info(f"Metadata index created for '{field}'")
         except Exception as e:
             if "already exists" in str(e):
-                print(f"Index for '{field}' already exists")
+                logger.warning(f"Index for '{field}' already exists")
             else:
-                print(f"Failed to create index for '{field}': {e}")
+                logger.error(f"Failed to create index for '{field}': {e}")

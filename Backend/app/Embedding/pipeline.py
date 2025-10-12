@@ -3,12 +3,13 @@ import asyncio
 import uuid
 from qdrant_client.models import PointStruct
 from app.db.db import get_chunks, update_embedding_status
+from loguru import logger
 
 async def embedding_pipeline(collection_name, mongo_db, model, qdrant, batch_size: int = 50):
     """Runs the full embedding pipeline."""
     chunks = await get_chunks({"isEmbedded": False}, limit=batch_size, mongo_db=mongo_db)
     if not chunks:
-        print("No new chunks to embed.")
+        logger.info("No new chunks to embed.")
         return
 
     texts, ids, valid_chunks = [], [], []
@@ -38,5 +39,5 @@ async def embedding_pipeline(collection_name, mongo_db, model, qdrant, batch_siz
     for chunk in valid_chunks:
         await update_embedding_status(chunk["chunkId"], True, mongo_db=mongo_db)
 
-    print(f"✅ Inserted {len(points)} embeddings and updated MongoDB.")
+    logger.info(f"Inserted {len(points)} embeddings and updated MongoDB.")
 

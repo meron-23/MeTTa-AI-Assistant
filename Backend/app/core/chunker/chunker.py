@@ -4,6 +4,7 @@ from typing import List, Dict, Any
 from pymongo.database import Database as DB
 from app.core.chunker import metta_ast_parser, preprocess, utils
 from app.db.db import insert_chunks, clear_symbols_index
+from loguru import logger
 
 def getSize(node: metta_ast_parser.SyntaxNode) -> int:
     """Gets the size of a node based on its source text length."""
@@ -105,5 +106,5 @@ async def ast_based_chunker(index: Dict[str, str], db: DB, max_size: int = 1500)
     # After all files in this repo are processed, reset symbol index
     await clear_symbols_index(db)
 
-    print("Chunks Stored in database")
-    print("Chunking complete!")
+    logger.info("Chunks Stored in database")
+    logger.info("Chunking complete!")
