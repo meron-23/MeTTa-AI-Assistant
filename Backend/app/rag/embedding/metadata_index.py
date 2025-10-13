@@ -3,12 +3,12 @@ from qdrant_client.http.models import PayloadSchemaType
 from loguru import logger
 async def setup_metadata_indexes(qdrant_client: AsyncQdrantClient, collection_name: str):
     metadata_fields = {
-        "chunkId": PayloadSchemaType.KEYWORD,
-        "project": PayloadSchemaType.KEYWORD,
-        "repo": PayloadSchemaType.KEYWORD,
-        "file": PayloadSchemaType.KEYWORD,
-        "section": PayloadSchemaType.KEYWORD,
-        "version": PayloadSchemaType.KEYWORD,
+        # "chunkId": PayloadSchemaType.KEYWORD,
+        # "project": PayloadSchemaType.KEYWORD,
+        # "repo": PayloadSchemaType.KEYWORD,
+        # "file": PayloadSchemaType.KEYWORD,
+        # "section": PayloadSchemaType.KEYWORD,
+        # "version": PayloadSchemaType.KEYWORD,
         "source": PayloadSchemaType.KEYWORD,
     }
 

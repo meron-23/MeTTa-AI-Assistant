@@ -41,3 +41,7 @@ async def embedding_pipeline(collection_name, mongo_db, model, qdrant, batch_siz
 
     logger.info(f"Inserted {len(points)} embeddings and updated MongoDB.")
 
+async def embedding_user_input(model, user_input: str):
+    """Embeds and inserts a single user input."""
+    embedding = await asyncio.to_thread(model.encode, [user_input])
+    return embedding[0].tolist()
