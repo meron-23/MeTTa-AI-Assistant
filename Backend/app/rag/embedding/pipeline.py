@@ -28,7 +28,8 @@ async def embedding_pipeline(collection_name, mongo_db, model, qdrant, batch_siz
             vector=embeddings[i].tolist(),
             payload={
                 **{k: valid_chunks[i].get(k) for k in ["project", "repo", "file", "section", "version", "source"]},
-                "original_chunkId": valid_chunks[i].get("chunkId")
+                "original_chunkId": valid_chunks[i].get("chunkId"),
+                "chunk": valid_chunks[i].get("chunk", "")
             }
         )
         for i in range(len(valid_chunks))

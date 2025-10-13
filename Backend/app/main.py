@@ -9,7 +9,7 @@ import os
 from pymongo.errors import PyMongoError
 from dotenv import load_dotenv
 from sentence_transformers import SentenceTransformer
-from app.embedding.metadata_index import setup_metadata_indexes
+from app.rag.embedding.metadata_index import setup_metadata_indexes
 from qdrant_client import AsyncQdrantClient
 from qdrant_client.http.models import VectorParams, Distance
 

@@ -6,7 +6,8 @@ from fastapi import APIRouter, HTTPException, status, Depends, Query
 from ..core.repo_ingestion.ingest import ingest_pipeline
 from app.db.db import update_chunk, delete_chunk, get_chunk_by_id, get_chunks
 from app.dependencies import get_mongo_db, get_embedding_model_dep, get_qdrant_client_dep
-from app.embedding.pipeline import embedding_pipeline
+from app.rag.embedding.pipeline import embedding_pipeline
+from app.rag.retriever.retriever import EmbeddingRetriever
 
 
 router = APIRouter(
@@ -157,4 +158,30 @@ async def run_embedding_pipeline(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Embedding pipeline failed: {str(e)}"
+        )
+
+
+@router.get("/search", summary="Semantic search over chunks")
+async def semantic_search(
+    q: str = Query(..., min_length=1, description="User query"),
+    top_k: int = Query(5, ge=1, le=50),
+    model = Depends(get_embedding_model_dep),
+    qdrant = Depends(get_qdrant_client_dep),
+):
+    collection_name = os.getenv("COLLECTION_NAME")
+    if not collection_name:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="COLLECTION_NAME not set in environment variables."
+        )
+
+    try:
+        retriever = EmbeddingRetriever(model=model, qdrant=qdrant, collection_name=collection_name)
+        results = await retriever.retrieve(q, top_k=top_k)
+        # Flatten or return grouped by category
+        return {"query": q, "top_k": top_k, "results": results}
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Search failed: {str(e)}"
         )

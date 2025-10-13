@@ -4,6 +4,8 @@
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 
+RUN apt-get update && apt-get install -y git
+
 WORKDIR /app
 
 # Upgrade pip first, then install dependencies
