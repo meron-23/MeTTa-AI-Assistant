@@ -3,7 +3,8 @@ import time
 from loguru import logger
 from contextlib import asynccontextmanager
 from typing import AsyncIterator, Dict
-from app.routers import chunks
+from app.routers import chunks,auth, protected
+from app.core.middleware import AuthMiddleware
 from pymongo import AsyncMongoClient
 import os
 from pymongo.errors import PyMongoError
@@ -81,7 +82,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     logger.info("Application shutdown complete.")
 
 app = FastAPI(lifespan=lifespan)
+app.add_middleware(AuthMiddleware)
 app.include_router(chunks.router)
+app.include_router(auth.router)
+app.include_router(protected.router)
 
 
 @app.middleware("http") 
