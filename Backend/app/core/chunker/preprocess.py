@@ -4,23 +4,24 @@ from typing import Any, Dict, List
 from pymongo.database import Database
 from app.core.chunker import metta_ast_parser 
 from app.db.db import get_all_symbols, upsert_symbol
+from loguru import logger
 
 # take the src code return the potential chunks retrieved from the symbol index table
 async def preprocess_code(repo_files: defaultdict, db: Database) -> List[List[str]]:
     for repo_name, files_path in repo_files.items():
-        print(f"Processing repo: {repo_name}")
+        logger.info(f"Processing repo: {repo_name}")
         for rel_path, file_path in files_path:
 
             try:
                 with open(file_path, "r", encoding="utf-8") as f:
                     code = f.read()
                 await parse_file(code,rel_path, db)
-                print(f"Processed file: {rel_path}")
+                logger.info(f"Processed file: {rel_path}")
             except FileNotFoundError:   
-                print(f"Error: Input file not found at '{rel_path}'")
+                logger.error(f"Error: Input file not found at '{rel_path}'")
                 continue
             except Exception as e:
-                print(f"Error processing file '{rel_path}': {e}")
+                logger.error(f"Error processing file '{rel_path}': {e}")
                 continue
     
     # fetch all symbols
