@@ -8,10 +8,16 @@ from passlib.context import CryptContext
 from loguru import logger
 from .db import _get_collection
 import os
+from enum import Enum
+
+# Define an Enum for user roles
+class UserRole(Enum):
+    ADMIN = "admin"
+    USER = "user"
 
 class UserBase(BaseModel):
     email: EmailStr
-    role: str  # e.g., "admin" or "user"
+    role: UserRole  # Use Enum for role validation
 
 class UserCreate(UserBase):
     password: str
@@ -36,7 +42,6 @@ async def create_user(user_data: UserCreate, mongo_db: Database = None) -> Optio
     # Clean and encode password, truncate to 72 bytes
     password = user_data.password.strip()  # Remove any trailing whitespace/newlines
     password_bytes = password.encode('utf-8')[:72]
-    # Hash as bytes
     user_dict["hashed_password"] = pwd_context.hash(password_bytes)
     del user_dict["password"]
     try:
@@ -58,7 +63,15 @@ async def seed_admin(mongo_db: Database = None) -> None:
         admin_password = os.getenv("ADMIN_PASSWORD")
         if not all([admin_email, admin_role, admin_password]):
             raise RuntimeError("One or more admin credentials (ADMIN_EMAIL, ADMIN_ROLE, ADMIN_PASSWORD) are not set in the .env file.")
-        admin_data = UserCreate(email=admin_email, role=admin_role, password=admin_password)
+        # Validate and convert role from .env to Enum
+        role_value = admin_role.lower()  # Ensure case-insensitive match
+        if role_value == UserRole.ADMIN.value:
+            role = UserRole.ADMIN
+        elif role_value == UserRole.USER.value:
+            role = UserRole.USER
+        else:
+            raise ValueError(f"Invalid role in .env: {admin_role}. Must be 'admin' or 'user'.")
+        admin_data = UserCreate(email=admin_email, role=role, password=admin_password)
         inserted_id = await create_user(admin_data, mongo_db)
         if inserted_id:
             logger.info("Admin user seeded successfully.")
