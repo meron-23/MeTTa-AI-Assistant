@@ -35,7 +35,6 @@ async def create_user(user_data: UserCreate, mongo_db: Database = None) -> Optio
     # Clean and encode password, truncate to 72 bytes
     password = user_data.password.strip()  # Remove any trailing whitespace/newlines
     password_bytes = password.encode('utf-8')[:72]
-    logger.debug(f"Hashing password: {password} (length: {len(password_bytes)} bytes)")
     # Hash as bytes
     user_dict["hashed_password"] = pwd_context.hash(password_bytes)
     del user_dict["password"]
