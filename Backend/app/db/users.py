@@ -1,4 +1,3 @@
-# app/db/users.py
 from typing import Optional
 from pydantic import BaseModel, EmailStr
 from bson import ObjectId
@@ -59,19 +58,10 @@ async def seed_admin(mongo_db: Database = None) -> None:
     admin = await collection.find_one({"role": "admin"})
     if not admin:
         admin_email = os.getenv("ADMIN_EMAIL")
-        admin_role = os.getenv("ADMIN_ROLE")
         admin_password = os.getenv("ADMIN_PASSWORD")
-        if not all([admin_email, admin_role, admin_password]):
-            raise RuntimeError("One or more admin credentials (ADMIN_EMAIL, ADMIN_ROLE, ADMIN_PASSWORD) are not set in the .env file.")
-        # Validate and convert role from .env to Enum
-        role_value = admin_role.lower()  # Ensure case-insensitive match
-        if role_value == UserRole.ADMIN.value:
-            role = UserRole.ADMIN
-        elif role_value == UserRole.USER.value:
-            role = UserRole.USER
-        else:
-            raise ValueError(f"Invalid role in .env: {admin_role}. Must be 'admin' or 'user'.")
-        admin_data = UserCreate(email=admin_email, role=role, password=admin_password)
+        if not all([admin_email, admin_password]):
+            raise RuntimeError("One or more admin credentials (ADMIN_EMAIL, ADMIN_PASSWORD) are not set in the .env file.")
+        admin_data = UserCreate(email=admin_email, role=UserRole.ADMIN, password=admin_password)
         inserted_id = await create_user(admin_data, mongo_db)
         if inserted_id:
             logger.info("Admin user seeded successfully.")
