@@ -1,3 +1,4 @@
+# app/db/users.py
 from typing import Optional
 from pydantic import BaseModel, EmailStr
 from bson import ObjectId
@@ -5,7 +6,7 @@ from pymongo.database import Database
 from pymongo.collection import Collection
 from passlib.context import CryptContext
 from loguru import logger
-from .db import _get_collection
+from app.db.db import _get_collection
 import os
 from enum import Enum
 
@@ -37,11 +38,15 @@ async def create_user(user_data: UserCreate, mongo_db: Database = None) -> Optio
     if mongo_db is None:
         raise RuntimeError("Database connection not initialized")
     collection = _get_collection(mongo_db, "users")
+    # Check for duplicate email
+    existing_user = await collection.find_one({"email": user_data.email})
+    if existing_user:
+        raise ValueError(f"Email {user_data.email} is already registered.")
     user_dict = user_data.dict()
-    # Clean and encode password, truncate to 72 bytes
-    password = user_data.password.strip()  # Remove any trailing whitespace/newlines
-    password_bytes = password.encode('utf-8')[:72]
-    user_dict["hashed_password"] = pwd_context.hash(password_bytes)
+    # Convert role Enum to string for MongoDB
+    user_dict["role"] = user_data.role.value
+    # Use stripped string directly for hashing
+    user_dict["hashed_password"] = pwd_context.hash(user_data.password.strip())
     del user_dict["password"]
     try:
         result = await collection.insert_one(user_dict)
