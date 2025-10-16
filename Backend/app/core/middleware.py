@@ -1,7 +1,7 @@
-# app/core/middleware.py (final fix)
 from fastapi import Request, HTTPException
 from starlette.middleware.base import BaseHTTPMiddleware
 from jose import JWTError, jwt
+from jose.exceptions import ExpiredSignatureError
 import os
 from loguru import logger
 
@@ -22,7 +22,13 @@ class AuthMiddleware(BaseHTTPMiddleware):
             raise HTTPException(status_code=401, detail="No token provided")
         try:
             payload = jwt.decode(token[7:], self.secret_key, algorithms=[ALGORITHM])
-            request.state.user = {"id": payload["sub"], "role": payload["role"]}
+            user_id = payload.get("sub")
+            role = payload.get("role")
+            if not user_id:
+                raise HTTPException(status_code=401, detail="Token missing 'sub' claim")
+            request.state.user = {"id": user_id, "role": role}
+        except ExpiredSignatureError:
+            raise HTTPException(status_code=401, detail="Token expired")
         except JWTError:
             raise HTTPException(status_code=401, detail="Invalid token")
         response = await call_next(request)
