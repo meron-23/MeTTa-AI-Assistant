@@ -1,20 +1,33 @@
 from fastapi import APIRouter, HTTPException, status, Depends
 from app.db.users import create_user, UserCreate
-from app.services.auth import authenticate_user, create_access_token
-from app.dependencies import get_mongo_db  # Assume this exists or create it
+from app.services.auth import authenticate_user, create_access_token, create_refresh_token, get_secret_key
+from app.db.db import _get_collection  
+from app.dependencies import get_mongo_db  
 from pymongo.database import Database
-from pydantic import BaseModel  # Add this import
+from pymongo.collection import Collection
+from bson import ObjectId
+from pydantic import BaseModel 
+from jose import JWTError, jwt
+from jose.exceptions import ExpiredSignatureError
 
-# New model for login request
 class LoginRequest(BaseModel):
     email: str
     password: str
+
+class RefreshRequest(BaseModel):
+    refresh_token: str
 
 router = APIRouter(
     prefix="/api/auth",
     tags=["auth"],
     responses={404: {"description": "Not found"}},
 )
+ALGORITHM = "HS256"
+
+class TokenResponse(BaseModel):
+    access_token: str
+    refresh_token: str
+    token_type: str
 
 @router.post("/signup", response_model=dict, status_code=status.HTTP_201_CREATED)
 async def signup(user: UserCreate, mongo_db: Database = Depends(get_mongo_db)):
@@ -23,10 +36,31 @@ async def signup(user: UserCreate, mongo_db: Database = Depends(get_mongo_db)):
         raise HTTPException(status_code=400, detail="User creation failed")
     return {"message": "User created", "user_id": str(user_id)}
 
-@router.post("/login", response_model=dict)
+@router.post("/login", response_model=TokenResponse)
 async def login(login_data: LoginRequest, mongo_db: Database = Depends(get_mongo_db)):
     user = await authenticate_user(login_data.email, login_data.password, mongo_db)
     if not user:
         raise HTTPException(status_code=401, detail="Invalid credentials")
-    token = create_access_token({"sub": str(user["_id"]), "role": user["role"]})
-    return {"access_token": token, "token_type": "bearer"}
+    access_token = create_access_token({"sub": str(user["_id"]), "role": user["role"]})
+    refresh_token = create_refresh_token({"sub": str(user["_id"]), "role": user["role"]})
+    return {"access_token": access_token, "refresh_token": refresh_token, "token_type": "bearer"}
+
+@router.post("/refresh", response_model=TokenResponse)
+async def refresh(refresh_request: RefreshRequest, mongo_db: Database = Depends(get_mongo_db)):
+    try:
+        payload = jwt.decode(refresh_request.refresh_token, get_secret_key(), algorithms=[ALGORITHM])
+        if payload.get("type") != "refresh":
+            raise HTTPException(status_code=400, detail="Invalid refresh token")
+        user_id = payload.get("sub")
+        if not user_id:
+            raise HTTPException(status_code=401, detail="Token missing 'sub' claim")
+        user = await _get_collection(mongo_db, "users").find_one({"_id": ObjectId(user_id)})
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+        new_access_token = create_access_token({"sub": user_id, "role": user["role"]})
+        new_refresh_token = create_refresh_token({"sub": user_id, "role": user["role"]})
+        return {"access_token": new_access_token, "refresh_token": new_refresh_token, "token_type": "bearer"}
+    except ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Refresh token expired")
+    except JWTError:
+        raise HTTPException(status_code=401, detail="Invalid refresh token")
