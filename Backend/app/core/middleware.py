@@ -20,6 +20,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
         token = request.headers.get("Authorization")
         if not token or not token.startswith("Bearer "):
             raise HTTPException(status_code=401, detail="No token provided")
+        
         try:
             payload = jwt.decode(token[7:], self.secret_key, algorithms=[ALGORITHM])
             user_id = payload.get("sub")
