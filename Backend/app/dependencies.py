@@ -1,4 +1,5 @@
 from fastapi import Request, Depends
+from pymongo import AsyncMongoClient
 from pymongo.database import Database 
 from sentence_transformers import SentenceTransformer
 from qdrant_client import AsyncQdrantClient
@@ -8,7 +9,7 @@ from app.services.llm_service import BaseLLMProvider, GeminiLLMProvider
 from app.services.chunk_annotation_service import ChunkAnnotationService
 
 
-def get_mongo_client(request: Request):
+def get_mongo_client(request: Request) -> AsyncMongoClient:
     return request.app.state.mongo_client
 
 def get_mongo_db(request: Request) -> Database:
