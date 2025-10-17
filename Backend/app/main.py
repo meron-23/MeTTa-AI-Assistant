@@ -3,15 +3,17 @@ import time
 from loguru import logger
 from contextlib import asynccontextmanager
 from typing import AsyncIterator, Dict
-from app.routers import chunks
+from app.routers import chunks,auth, protected
+from app.core.middleware import AuthMiddleware
 from pymongo import AsyncMongoClient
 import os
 from pymongo.errors import PyMongoError
 from dotenv import load_dotenv
 from sentence_transformers import SentenceTransformer
-from app.embedding.metadata_index import setup_metadata_indexes
+from app.Embedding.metadata_index import setup_metadata_indexes
 from qdrant_client import AsyncQdrantClient
 from qdrant_client.http.models import VectorParams, Distance
+from app.db.users import seed_admin
 
 
 load_dotenv()
@@ -31,6 +33,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     try:
         await app.state.mongo_db.command({"ping": 1})
         logger.info("Successfully connected to MongoDB")
+        await seed_admin(app.state.mongo_db)
     except PyMongoError as e:
         logger.exception("Failed to connect to MongoDB: {}", e)
         try:
@@ -79,7 +82,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     logger.info("Application shutdown complete.")
 
 app = FastAPI(lifespan=lifespan)
+app.add_middleware(AuthMiddleware)
 app.include_router(chunks.router)
+app.include_router(auth.router)
+app.include_router(protected.router)
 
 
 @app.middleware("http") 
