@@ -4,6 +4,7 @@ from bson import ObjectId
 from pymongo.errors import BulkWriteError
 from pymongo.database import Database
 from pymongo.collection import Collection
+from loguru import logger
 
 def _get_collection(mongo_db: Database, name: str) -> Collection:
     if mongo_db is None:
@@ -44,11 +45,11 @@ async def insert_chunk(chunk_data: dict, mongo_db: Database = None) -> str | Non
     try: 
         chunk = ChunkSchema(**chunk_data)
     except Exception as e:
-        print("Validation error:", e)
+        logger.error("Validation error:", e)
         return None
     
     if await collection.find_one({"chunkId": chunk.chunkId}):
-        print(f"Chunk with chunkId '{chunk.chunkId}' already exists.")
+        logger.warning(f"Chunk with chunkId '{chunk.chunkId}' already exists.")
         return None
     result = await collection.insert_one(chunk.model_dump())
     return chunk.chunkId
@@ -71,9 +72,9 @@ async def insert_chunks(
             if not await collection.find_one({"chunkId": chunk.chunkId}):
                 valid_chunks.append(chunk.model_dump())
             else:
-                print(f"Skipping duplicate chunkId: {chunk.chunkId}")
+                logger.warning(f"Skipping duplicate chunkId: {chunk.chunkId}")
         except Exception as e:
-            print("Validation error:", e)
+            logger.error("Validation error:", e)
 
         if not valid_chunks:
             return []
@@ -83,7 +84,7 @@ async def insert_chunks(
         result = await collection.insert_many(valid_chunks, ordered=False)
         inserted_ids = result.inserted_ids
     except BulkWriteError as e:
-        print("Some duplicates were skipped.", e.details)
+        logger.warning("Some duplicates were skipped.", e.details)
         inserted_ids = e.details.get("writeErrors", [])
         # Extract inserted ids if available
         inserted_ids = [item["op"]["chunkId"] for item in inserted_ids if "op" in item and "chunkId" in item["op"]]

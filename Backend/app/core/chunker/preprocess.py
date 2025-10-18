@@ -4,23 +4,24 @@ from typing import Any, Dict, List
 from pymongo.database import Database
 from app.core.chunker import metta_ast_parser 
 from app.db.db import get_all_symbols, upsert_symbol
+from loguru import logger
 
 # take the src code return the potential chunks retrieved from the symbol index table
 async def preprocess_code(repo_files: defaultdict, db: Database) -> List[List[str]]:
     for repo_name, files_path in repo_files.items():
-        print(f"Processing repo: {repo_name}")
+        logger.info(f"Processing repo: {repo_name}")
         for rel_path, file_path in files_path:
 
             try:
                 with open(file_path, "r", encoding="utf-8") as f:
                     code = f.read()
                 await parse_file(code,rel_path, db)
-                print(f"Processed file: {rel_path}")
+                logger.info(f"Processed file: {rel_path}")
             except FileNotFoundError:   
-                print(f"Error: Input file not found at '{rel_path}'")
+                logger.error(f"Error: Input file not found at '{rel_path}'")
                 continue
             except Exception as e:
-                print(f"Error processing file '{rel_path}': {e}")
+                logger.error(f"Error processing file '{rel_path}': {e}")
                 continue
     
     # fetch all symbols
@@ -41,22 +42,41 @@ async def preprocess_code(repo_files: defaultdict, db: Database) -> List[List[st
 async def parse_file(source_code:str, rel_path:str, db:Database) -> None:
     tree = metta_ast_parser.parse(source_code)
 
-    for idx,node in enumerate(tree):
+    # Cache comments above a function/type/assertion 
+    # as part of that symbol's chunk
+    comment_cache = []
+
+    for node in tree:
         head_symbol = extract_symbol_from_node(node, source_code)
 
         if head_symbol["type"] == "unknown":
             continue
 
         if head_symbol["type"] == "comment":
-            head_symbol["symbol"] = f"comment_{idx}"
-            head_symbol["type"] = "def"
+            comment_cache.append(source_code[node.src_range[0]:node.src_range[1]])
+            continue  
 
         if head_symbol["symbol"] == None:
             continue
         
         # insert symbol
         st, end = node.src_range
-        await upsert_symbol(head_symbol["symbol"], head_symbol["type"] + "s", [source_code[st:end],rel_path], db)
+        # add comment above function/type/assertion
+        if comment_cache:
+            await upsert_symbol(head_symbol["symbol"], head_symbol["type"] + "s",\
+                            ["\n".join(comment_cache) + "\n" + source_code[st:end], rel_path], \
+                            db)
+        # no comment associated with function
+        else:
+            await upsert_symbol(head_symbol["symbol"], head_symbol["type"] + "s",\
+                                [source_code[st:end], rel_path], \
+                                db)
+        # clear cache
+        comment_cache = []
+    
+    # remaining comments
+    if comment_cache:
+        await upsert_symbol(f"{rel_path}_comment", "comments", ["\n".join(comment_cache), rel_path], db)
 
 def extract_symbol_from_node(node: metta_ast_parser.SyntaxNode, source_text: str) -> Dict[str, Any]:
     st, end = node.src_range
