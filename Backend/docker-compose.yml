@@ -2,7 +2,7 @@
 services:
   api:
     build: .
-    command: python -m app.run
+    command: sh -c "python -m app.run"
     ports:
       - "8000:8000"
     volumes:
@@ -14,6 +14,8 @@ services:
       - .env
     environment:
       - LOG_DIR=/app/logs
+    shm_size: "1g"
+    ipc: host
 
   qdrant:
     image: qdrant/qdrant:v1.7.3
