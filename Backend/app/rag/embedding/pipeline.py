@@ -10,7 +10,7 @@ async def embedding_pipeline(collection_name, mongo_db, model, qdrant, batch_siz
     chunks = await get_chunks({"isEmbedded": False}, limit=batch_size, mongo_db=mongo_db)
     if not chunks:
         logger.info("No new chunks to embed.")
-        return
+        return 0
 
     texts, ids, valid_chunks = [], [], []
     for chunk in chunks:
@@ -19,6 +19,9 @@ async def embedding_pipeline(collection_name, mongo_db, model, qdrant, batch_siz
         texts.append(chunk["chunk"])
         ids.append(str(uuid.uuid5(uuid.NAMESPACE_OID, chunk["chunkId"])))
         valid_chunks.append(chunk)
+    if not valid_chunks:
+        logger.info("No valid chunks to embed in this batch.")
+        return 0
 
     embeddings = await asyncio.to_thread(model.encode, texts)
 
@@ -41,7 +44,7 @@ async def embedding_pipeline(collection_name, mongo_db, model, qdrant, batch_siz
         await update_embedding_status(chunk["chunkId"], True, mongo_db=mongo_db)
 
     logger.info(f"Inserted {len(points)} embeddings and updated MongoDB.")
-
+    return len(valid_chunks)
 async def embedding_user_input(model, user_input: str):
     """Embeds and inserts a single user input."""
     embedding = await asyncio.to_thread(model.encode, [user_input])
