@@ -40,10 +40,16 @@ async def embedding_pipeline(collection_name, mongo_db, model, qdrant, batch_siz
 
     await qdrant.upsert(collection_name=collection_name, points=points)
 
-    for chunk in valid_chunks:
-        await update_embedding_status(chunk["chunkId"], True, mongo_db=mongo_db)
+    # Batch update MongoDB - much more efficient than individual updates
+    chunk_ids = [chunk["chunkId"] for chunk in valid_chunks]
+    from app.db.db import update_chunks
+    updated_count = await update_chunks(
+        {"chunkId": {"$in": chunk_ids}}, 
+        {"isEmbedded": True}, 
+        mongo_db=mongo_db
+    )
 
-    logger.info(f"Inserted {len(points)} embeddings and updated MongoDB.")
+    logger.info(f"Inserted {len(points)} embeddings and updated {updated_count} chunks in MongoDB.")
     return len(valid_chunks)
 async def embedding_user_input(model, user_input: str):
     """Embeds and inserts a single user input."""
