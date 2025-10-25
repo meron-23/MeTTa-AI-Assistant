@@ -1,6 +1,28 @@
 from qdrant_client import AsyncQdrantClient
-from qdrant_client.http.models import PayloadSchemaType
+from qdrant_client.http.models import PayloadSchemaType, VectorParams, Distance
 from loguru import logger
+
+async def create_collection_if_not_exists(qdrant_client: AsyncQdrantClient, collection_name: str):
+    """Create Qdrant collection if it doesn't exist"""
+    try:
+        collections = await qdrant_client.get_collections()
+        existing_collections = [col.name for col in collections.collections]
+        
+        if collection_name not in existing_collections:
+            await qdrant_client.create_collection(
+                collection_name=collection_name,
+                vectors_config=VectorParams(
+                    size=384,
+                    distance=Distance.COSINE
+                )
+            )
+            logger.info(f"Created Qdrant collection: {collection_name}")
+        else:
+            logger.info(f"Qdrant collection {collection_name} already exists")
+    except Exception as e:
+        logger.error(f"Failed to create/check collection {collection_name}: {e}")
+        raise
+
 async def setup_metadata_indexes(qdrant_client: AsyncQdrantClient, collection_name: str):
     metadata_fields = {
         # "chunkId": PayloadSchemaType.KEYWORD,
