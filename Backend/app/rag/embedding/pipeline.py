@@ -1,4 +1,3 @@
-# app/embedding/embedding_pipeline.py
 import asyncio
 import uuid
 from qdrant_client.models import PointStruct

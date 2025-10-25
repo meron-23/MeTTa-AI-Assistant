@@ -10,7 +10,7 @@ import os
 from pymongo.errors import PyMongoError
 from dotenv import load_dotenv
 from sentence_transformers import SentenceTransformer
-from app.rag.embedding.metadata_index import setup_metadata_indexes
+from app.rag.embedding.metadata_index import setup_metadata_indexes, create_collection_if_not_exists
 from qdrant_client import AsyncQdrantClient
 from qdrant_client.http.models import VectorParams, Distance
 from app.db.users import seed_admin
@@ -57,6 +57,13 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     app.state.qdrant_client = AsyncQdrantClient(host=qdrant_host, port=qdrant_port)
     logger.info("Qdrant client initialized")
+
+    try:
+        await create_collection_if_not_exists(app.state.qdrant_client, collection_name)
+        logger.info("Qdrant collection setup completed")
+    except Exception as e:
+        logger.error(f"Failed to create Qdrant collection: {e}")
+        raise
 
     # Setup metadata indexes (optional, non-blocking)
     try:
