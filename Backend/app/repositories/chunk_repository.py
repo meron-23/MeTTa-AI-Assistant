@@ -2,10 +2,9 @@ from loguru import logger
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from typing import Optional, List
 import time
-from app.model.chunk import Chunk, AnnotationStatus
+from app.model.chunk import ChunkSchema, AnnotationStatus
 
 STALE_PENDING_THRESHOLD = 60 * 60  
-
 
 class ChunkRepository:
     """
@@ -24,10 +23,10 @@ class ChunkRepository:
         await self.collection.create_index([("status", 1), ("annotation", 1)])
         logger.info("MongoDB indexes ensured for chunks collection.")
 
-    async def get_chunk_by_id(self, chunk_id: str) -> Optional[Chunk]:
+    async def get_chunk_by_id(self, chunk_id: str) -> Optional[ChunkSchema]:
         doc = await self.collection.find_one({"chunkId": chunk_id})
         if doc:
-            return Chunk(**doc)
+            return ChunkSchema(**doc)
         return None
 
     get_chunk_for_annotation = get_chunk_by_id
@@ -65,7 +64,7 @@ class ChunkRepository:
         )
         return update_result.modified_count > 0
 
-    async def get_unannotated_chunks(self, limit: int = 100, include_failed: bool = False) -> List[Chunk]:
+    async def get_unannotated_chunks(self, limit: int = 100, include_failed: bool = False) -> List[ChunkSchema]:
         """
         Retrieves chunks that have not yet been annotated or are stale PENDING.
         Includes chunks with missing/null 'annotation', status 'RAW', or stuck 'PENDING'.
@@ -85,12 +84,12 @@ class ChunkRepository:
         query = {"$or": base_conditions}
 
         cursor = self.collection.find(query).limit(limit)
-        results = [Chunk(**doc) async for doc in cursor]
+        results = [ChunkSchema(**doc) async for doc in cursor]
 
         logger.info(f"Fetched {len(results)} unannotated chunks (include_failed={include_failed})")
         return results
 
-    async def get_failed_chunks(self, limit: int = 100, include_quota: bool = False) -> List[Chunk]:
+    async def get_failed_chunks(self, limit: int = 100, include_quota: bool = False) -> List[ChunkSchema]:
         """
         Return chunks in FAILED_GEN or (optionally) FAILED_QUOTA for retry attempts.
         """
@@ -99,4 +98,4 @@ class ChunkRepository:
             statuses.append(AnnotationStatus.FAILED_QUOTA.value)
 
         cursor = self.collection.find({"status": {"$in": statuses}}).limit(limit)
-        return [Chunk(**doc) async for doc in cursor]
+        return [ChunkSchema(**doc) async for doc in cursor]

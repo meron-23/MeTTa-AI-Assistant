@@ -1,6 +1,7 @@
 from pydantic import BaseModel, Field
 from typing import Optional, Literal, List, Union 
 from enum import Enum
+from datetime import datetime 
 
 
 class AnnotationStatus(str, Enum):
@@ -10,8 +11,9 @@ class AnnotationStatus(str, Enum):
     ANNOTATED = "ANNOTATED"
     FAILED_QUOTA = "FAILED_QUOTA"
     FAILED_GEN = "FAILED_GEN"
-class Chunk(BaseModel):
-    
+
+# Set up MongoDB schema/collections for chunks and metadata.
+class ChunkSchema(BaseModel):
     chunkId: str 
     source: Literal["code", "specification", "documentation"]
     chunk: str  
@@ -22,7 +24,6 @@ class Chunk(BaseModel):
 
     section: Union[str, List[str]]
     file: Union[str, List[str]]
-
     
     description: Optional[str] = Field(
         None, 
@@ -32,10 +33,9 @@ class Chunk(BaseModel):
     
     #Fields for the Annotation Service Status and Timestamp
     status: AnnotationStatus = Field(AnnotationStatus.RAW, description="Processing status of the chunk.")
-    last_annotated_at: Optional[float] = None
+    last_annotated_at: Optional[datetime] = None
     
-    # --- FIX 1: ADDED MISSING FIELDS FOR PERSISTENCE ---
-    pending_since: Optional[float] = None
+    pending_since: Optional[datetime] = None
     retry_count: int = 0 
     
     # Configuration to ensure Pydantic can read from the alias

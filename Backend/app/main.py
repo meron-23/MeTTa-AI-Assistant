@@ -1,12 +1,11 @@
 ﻿from fastapi import FastAPI, Request, Response
 import time
+import os
 from loguru import logger
 from contextlib import asynccontextmanager
 from typing import AsyncIterator, Dict
-from app.routers import chunks, auth, protected
 from app.core.middleware import AuthMiddleware
 from pymongo import AsyncMongoClient
-import os
 from pymongo.errors import PyMongoError
 from dotenv import load_dotenv
 from sentence_transformers import SentenceTransformer
@@ -14,7 +13,7 @@ from app.rag.embedding.metadata_index import setup_metadata_indexes, create_coll
 from qdrant_client import AsyncQdrantClient
 from qdrant_client.http.models import VectorParams, Distance
 from app.db.users import seed_admin
-from app.routers import chunks, auth, protected, chunk_annotation
+from app.routers import chunks, auth, protected,chunk_annotation
 
 from app.repositories.chunk_repository import ChunkRepository
 

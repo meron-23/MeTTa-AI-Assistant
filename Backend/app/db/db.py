@@ -6,11 +6,14 @@ from pymongo.database import Database
 from pymongo.collection import Collection
 from loguru import logger
 from typing import Union, List
+from app.model.chunk import ChunkSchema
+
 
 def _get_collection(mongo_db: Database, name: str) -> Collection:
     if mongo_db is None:
         raise RuntimeError("Database connection not initialized — pass a valid mongo_db")
     return mongo_db.get_collection(name)
+# <<<<<<< Updated upstream
 
 # Set up MongoDB schema/collections for chunks and metadata.
 class ChunkSchema(BaseModel):
@@ -36,6 +39,8 @@ class ChunkSchema(BaseModel):
     page_numbers: Optional[List[int]] = None
 
 
+# =======
+# >>>>>>> Stashed changes
 # Function to insert a single chunk into the MongoDB collection with validation.
 async def insert_chunk(chunk_data: dict, mongo_db: Database = None) -> str | None:
     """

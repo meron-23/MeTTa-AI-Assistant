@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from app.services.chunk_annotation_service import ChunkAnnotationService
 from app.services.llm_service import LLMQuotaExceededError
 from app.dependencies import get_annotation_service
-from app.model.chunk import Chunk 
+from app.model.chunk import ChunkSchema
 
 router = APIRouter(
     prefix="/annotation",
@@ -63,7 +63,7 @@ async def retry_failed_annotations(
         )
 
 
-@router.post("/{chunk_id}", response_model=Chunk, status_code=status.HTTP_200_OK)
+@router.post("/{chunk_id}", response_model=ChunkSchema, status_code=status.HTTP_200_OK)
 async def annotate_chunk(
     chunk_id: str,
     annotation_service: ChunkAnnotationService = Depends(get_annotation_service)
