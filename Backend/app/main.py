@@ -10,7 +10,7 @@ import os
 from pymongo.errors import PyMongoError
 from dotenv import load_dotenv
 from sentence_transformers import SentenceTransformer
-from app.Embedding.metadata_index import setup_metadata_indexes
+from app.rag.embedding.metadata_index import setup_metadata_indexes, create_collection_if_not_exists
 from qdrant_client import AsyncQdrantClient
 from qdrant_client.http.models import VectorParams, Distance
 from app.db.users import seed_admin
@@ -24,12 +24,17 @@ load_dotenv()
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     logger.info("Application has started")
     mongo_uri = os.getenv("MONGO_URI")
+    mongo_db_name = os.getenv("MONGO_DB")
     if not mongo_uri:
         logger.error("MONGO_URI is not set. Please set the MONGO_URI environment variable.")
         raise RuntimeError("MONGO_URI environment variable is required")
+    
+    if not mongo_db_name:
+        logger.error("MONGO_DB is not set. Please set the MONGO_DB environment variable.")
+        raise RuntimeError("MONGO_DB environment variable is required")
 
     app.state.mongo_client = AsyncMongoClient(mongo_uri)
-    app.state.mongo_db = app.state.mongo_client["chunkDB"]
+    app.state.mongo_db = app.state.mongo_client[mongo_db_name]
 
     # Validate connection by issuing a ping. If ping fails, close the client and stop startup.
     try:
@@ -63,8 +68,13 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         app.state.qdrant_client = AsyncQdrantClient(url=qdrant_host)
     else:
         app.state.qdrant_client = AsyncQdrantClient(host=qdrant_host, port=qdrant_port)
+    # Setup metadata indexes (optional, non-blocking)
+    try:
+        await setup_metadata_indexes(app.state.qdrant_client, collection_name)
+        logger.info("Metadata indexes setup completed")
+    except Exception as e:
+        logger.warning(f"Metadata index setup skipped or failed: {e}")
 
-    logger.info("Qdrant client initialized")
 
     # === Embedding Model Setup ===
     app.state.embedding_model = SentenceTransformer("all-MiniLM-L6-v2")

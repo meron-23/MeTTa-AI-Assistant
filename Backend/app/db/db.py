@@ -5,6 +5,7 @@ from pymongo.errors import BulkWriteError
 from pymongo.database import Database
 from pymongo.collection import Collection
 from loguru import logger
+from typing import Union, List
 
 def _get_collection(mongo_db: Database, name: str) -> Collection:
     if mongo_db is None:
@@ -14,14 +15,26 @@ def _get_collection(mongo_db: Database, name: str) -> Collection:
 # Set up MongoDB schema/collections for chunks and metadata.
 class ChunkSchema(BaseModel):
     chunkId: str
-    source: Literal["code", "specification", "documentation"]
+    source: Literal["code", "documentation", "others"]
     chunk: str
-    project: str
-    repo: str
-    section: list[str]
-    file: list[str]
-    version: str
     isEmbedded: bool = False
+
+    # Code-specific fields
+    project: Optional[str] = None
+    repo: Optional[str] = None
+    section: Optional[List[str]] = None
+    file: Optional[List[str]] = None
+    version: Optional[str] = None
+
+    # Documentation-specific fields
+    url: Optional[str] = None
+    page_title: Optional[str] = None
+    category: Optional[str] = None
+
+    # PDF-specific fields
+    filename: Optional[str] = None
+    page_numbers: Optional[List[int]] = None
+
 
 # Function to insert a single chunk into the MongoDB collection with validation.
 async def insert_chunk(chunk_data: dict, mongo_db: Database = None) -> str | None:
@@ -103,18 +116,34 @@ async def get_chunks(
     cursor = collection.find(filter_query, {"_id": 0}).limit(limit)
     return [doc async for doc in cursor]
 
-# Function to update embedding status of a chunk by chunkId.
 async def update_embedding_status(
-    chunk_id: str, status: bool, mongo_db: Database = None
+    chunk_ids: Union[str, List[str]], 
+    status: bool, 
+    mongo_db: Database = None
 ) -> int:
     """
-    Update the embedding status of a chunk.
+    Update the embedding status of one or more chunks.
+
+    Args:
+        chunk_ids (Union[str, List[str]]): One chunkId or a list of chunkIds to update.
+        status (bool): The new embedding status (True/False).
+        mongo_db (Database, optional): MongoDB connection.
+    
+    Returns:
+        int: Number of documents modified.
     """
     collection = _get_collection(mongo_db, "chunks")
-    result = await collection.update_one(
-        {"chunkId": chunk_id}, {"$set": {"isEmbedded": status}}
-    )
-    return result.modified_count
+
+    # Normalize input to list
+    if isinstance(chunk_ids, str):
+        filter_query = {"chunkId": chunk_ids}
+        result = await collection.update_one(filter_query, {"$set": {"isEmbedded": status}})
+        return result.modified_count
+    else:
+        filter_query = {"chunkId": {"$in": chunk_ids}}
+        result = await collection.update_many(filter_query, {"$set": {"isEmbedded": status}})
+        return result.modified_count
+
 
 
 # Function to update any fields of a single chunk by chunkID.
@@ -149,6 +178,73 @@ async def delete_chunk(chunk_id: str, mongo_db: Database = None) -> int:
     collection = _get_collection(mongo_db, "chunks")
     result = await collection.delete_one({"chunkId": chunk_id})
     return result.deleted_count
+
+
+# ----------------------------------'
+# INGESTION STATUS CRUD
+# ----------------------------------'
+
+
+async def mark_ingestion_complete(
+    site_name: str, total_chunks: int, mongo_db: Database = None
+) -> None:
+    """
+    Mark an ingestion process as complete for a specific site.
+    """
+    ingestion_collection = _get_collection(mongo_db, "ingestion_status")
+    await ingestion_collection.update_one(
+        {"site_name": site_name},
+        {
+            "$set": {
+                "site_name": site_name,
+                "completed": True,
+                "total_chunks": total_chunks,
+                "completed_at": {
+                    "$date": {"$numberLong": str(int(__import__("time").time() * 1000))}
+                },
+                "status": "success",
+            }
+        },
+        upsert=True,
+    )
+
+
+async def check_ingestion_complete(
+    site_name: str, mongo_db: Database = None
+) -> dict | None:
+    """
+    Check if ingestion has been completed for a specific site.
+    Returns the completion record if found, None otherwise.
+    """
+    ingestion_collection = _get_collection(mongo_db, "ingestion_status")
+    return await ingestion_collection.find_one(
+        {"site_name": site_name, "completed": True}
+    )
+
+
+async def get_all_ingestion_status(mongo_db: Database = None) -> List[dict]:
+    """
+    Get all ingestion completion records.
+    """
+    ingestion_collection = _get_collection(mongo_db, "ingestion_status")
+    results = []
+    async for doc in ingestion_collection.find({}):
+        results.append(doc)
+    return results
+
+
+async def clear_ingestion_status(
+    site_name: str = None, mongo_db: Database = None
+) -> None:
+    """
+    Clear ingestion status for a specific site or all sites.
+    """
+    ingestion_collection = _get_collection(mongo_db, "ingestion_status")
+    if site_name:
+        await ingestion_collection.delete_one({"site_name": site_name})
+    else:
+        await ingestion_collection.delete_many({})
+
 
 # ----------------------------------'
 # SYMBOLS CRUD

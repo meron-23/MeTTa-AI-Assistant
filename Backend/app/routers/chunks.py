@@ -6,8 +6,8 @@ from fastapi import APIRouter, HTTPException, status, Depends, Query
 from ..core.repo_ingestion.ingest import ingest_pipeline
 from app.db.db import update_chunk, delete_chunk, get_chunk_by_id, get_chunks
 from app.dependencies import get_mongo_db, get_embedding_model_dep, get_qdrant_client_dep
-from app.Embedding.pipeline import embedding_pipeline
-
+from app.rag.embedding.pipeline import embedding_pipeline
+from app.rag.retriever.retriever import EmbeddingRetriever
 
 router = APIRouter(
     prefix="/api/chunks",
@@ -18,12 +18,23 @@ router = APIRouter(
 class ChunkUpdate(BaseModel):
     source: Optional[str] = None
     chunk: Optional[str] = None
+    isEmbedded: Optional[bool] = None
+    
+    # Code-specific fields
     project: Optional[str] = None
     repo: Optional[str] = None
-    section: Optional[list[str]] = None
-    file: Optional[list[str]] = None
+    section: Optional[List[str]] = None
+    file: Optional[List[str]] = None
     version: Optional[str] = None
-    isEmbedded: Optional[bool] = None
+
+    # Documentation-specific fields
+    url: Optional[str] = None
+    page_title: Optional[str] = None
+    category: Optional[str] = None
+
+    # PDF-specific fields
+    filename: Optional[str] = None
+    page_numbers: Optional[List[int]] = None
 
 # chunk repository
 @router.post("/ingest", response_model=Dict[str, Any], status_code=status.HTTP_201_CREATED)
@@ -137,7 +148,43 @@ async def run_embedding_pipeline(
     model = Depends(get_embedding_model_dep),
     qdrant = Depends(get_qdrant_client_dep)
 ):
-    """Trigger the embedding pipeline."""
+    """Trigger the embedding pipeline until all unembedded chunks are processed."""
+    collection_name = os.getenv("COLLECTION_NAME")
+    if not collection_name:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="COLLECTION_NAME not set in environment variables."
+        )
+
+    total_embedded = 0
+    batch_size = 50
+    try:
+        while True:
+            num_embedded = await embedding_pipeline(
+                collection_name=collection_name,
+                mongo_db=mongo_db,
+                model=model,
+                qdrant=qdrant,
+                batch_size=batch_size
+            )
+            if num_embedded == 0:
+                break
+            total_embedded += num_embedded
+        return {"message": f"All unembedded chunks embedded successfully. Total embedded: {total_embedded}"}
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Embedding pipeline failed: {str(e)}"
+        )
+
+
+@router.get("/search", summary="Semantic search over chunks")
+async def semantic_search(
+    q: str = Query(..., min_length=1, description="User query"),
+    top_k: int = Query(5, ge=1, le=50),
+    model = Depends(get_embedding_model_dep),
+    qdrant = Depends(get_qdrant_client_dep),
+):
     collection_name = os.getenv("COLLECTION_NAME")
     if not collection_name:
         raise HTTPException(
@@ -146,15 +193,13 @@ async def run_embedding_pipeline(
         )
 
     try:
-        await embedding_pipeline(
-            collection_name=collection_name,
-            mongo_db=mongo_db,
-            model=model,
-            qdrant=qdrant
-        )
-        return {"message": "Embedding pipeline completed successfully"}
+        retriever = EmbeddingRetriever(model=model, qdrant=qdrant, collection_name=collection_name)
+        results = await retriever.retrieve(q, top_k=top_k, min_score=float(os.getenv("MIN_SCORE", "0.0")))
+        
+        # Flatten or return grouped by category
+        return {"query": q, "top_k": top_k, "results": results}
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Embedding pipeline failed: {str(e)}"
+            detail=f"Search failed: {str(e)}"
         )
