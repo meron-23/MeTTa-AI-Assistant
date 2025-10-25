@@ -5,6 +5,7 @@ from pymongo.errors import BulkWriteError
 from pymongo.database import Database
 from pymongo.collection import Collection
 from loguru import logger
+from typing import Union, List
 
 def _get_collection(mongo_db: Database, name: str) -> Collection:
     if mongo_db is None:
@@ -115,18 +116,34 @@ async def get_chunks(
     cursor = collection.find(filter_query, {"_id": 0}).limit(limit)
     return [doc async for doc in cursor]
 
-# Function to update embedding status of a chunk by chunkId.
 async def update_embedding_status(
-    chunk_id: str, status: bool, mongo_db: Database = None
+    chunk_ids: Union[str, List[str]], 
+    status: bool, 
+    mongo_db: Database = None
 ) -> int:
     """
-    Update the embedding status of a chunk.
+    Update the embedding status of one or more chunks.
+
+    Args:
+        chunk_ids (Union[str, List[str]]): One chunkId or a list of chunkIds to update.
+        status (bool): The new embedding status (True/False).
+        mongo_db (Database, optional): MongoDB connection.
+    
+    Returns:
+        int: Number of documents modified.
     """
     collection = _get_collection(mongo_db, "chunks")
-    result = await collection.update_one(
-        {"chunkId": chunk_id}, {"$set": {"isEmbedded": status}}
-    )
-    return result.modified_count
+
+    # Normalize input to list
+    if isinstance(chunk_ids, str):
+        filter_query = {"chunkId": chunk_ids}
+        result = await collection.update_one(filter_query, {"$set": {"isEmbedded": status}})
+        return result.modified_count
+    else:
+        filter_query = {"chunkId": {"$in": chunk_ids}}
+        result = await collection.update_many(filter_query, {"$set": {"isEmbedded": status}})
+        return result.modified_count
+
 
 
 # Function to update any fields of a single chunk by chunkID.

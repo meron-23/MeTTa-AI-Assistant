@@ -41,12 +41,8 @@ async def embedding_pipeline(collection_name, mongo_db, model, qdrant, batch_siz
 
     # Batch update MongoDB - much more efficient than individual updates
     chunk_ids = [chunk["chunkId"] for chunk in valid_chunks]
-    from app.db.db import update_chunks
-    updated_count = await update_chunks(
-        {"chunkId": {"$in": chunk_ids}}, 
-        {"isEmbedded": True}, 
-        mongo_db=mongo_db
-    )
+    updated_count = await update_embedding_status(chunk_ids, True, mongo_db)
+
 
     logger.info(f"Inserted {len(points)} embeddings and updated {updated_count} chunks in MongoDB.")
     return len(valid_chunks)
