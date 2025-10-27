@@ -13,9 +13,7 @@ class ChunkRepository:
     """
 
     def __init__(self, db: AsyncIOMotorDatabase, collection_name: str = "chunks"):
-        self.collection = db.get_collection(collection_name)
-
-        
+        self.collection = db.get_collection(collection_name)     
 
     async def _ensure_indexes(self):
         await self.collection.create_index("chunkId", unique=True)
@@ -39,15 +37,13 @@ class ChunkRepository:
         """
         updates = {
             "annotation": description,
-            "status": status.value,  # Use .value for consistency
+            "status": status.value, 
             "last_annotated_at": time.time()
         }
 
         if status == AnnotationStatus.PENDING:
             updates["pending_since"] = time.time()
         else:
-            # Setting to None allows MongoDB to remove the field if it was there,
-            # but we use $set instead of $unset to maintain idempotency.
             updates["pending_since"] = None
 
         update_result = await self.collection.update_one(
@@ -64,18 +60,18 @@ class ChunkRepository:
         )
         return update_result.modified_count > 0
 
-    async def get_unannotated_chunks(self, limit: int = 100, include_failed: bool = False) -> List[ChunkSchema]:
+    async def get_unannotated_chunks(self, limit: Optional[int] = None, include_failed: bool = False) -> List[ChunkSchema]:
         """
         Retrieves chunks that have not yet been annotated or are stale PENDING.
-        Includes chunks with missing/null 'annotation', status 'RAW', or stuck 'PENDING'.
-        Optionally includes failed ones if include_failed=True.
+        If limit is None, retrieves ALL matching chunks.
         """
         now = time.time()
         base_conditions = [
             {"annotation": {"$exists": False}},
             {"annotation": None},
-            {"status": "RAW"},
-            {"status": "PENDING", "pending_since": {"$lt": now - STALE_PENDING_THRESHOLD}}
+            {"status": AnnotationStatus.RAW.value}, 
+            {"status": AnnotationStatus.UNANNOTATED.value}, 
+            {"status": AnnotationStatus.PENDING.value, "pending_since": {"$lt": now - STALE_PENDING_THRESHOLD}}
         ]
 
         if include_failed:
@@ -83,10 +79,15 @@ class ChunkRepository:
 
         query = {"$or": base_conditions}
 
-        cursor = self.collection.find(query).limit(limit)
+        cursor = self.collection.find(query)
+        
+       
+        if limit is not None and limit > 0:
+            cursor = cursor.limit(limit)
+            
         results = [ChunkSchema(**doc) async for doc in cursor]
 
-        logger.info(f"Fetched {len(results)} unannotated chunks (include_failed={include_failed})")
+        logger.info(f"Fetched {len(results)} unannotated chunks (limit={limit}, include_failed={include_failed})")
         return results
 
     async def get_failed_chunks(self, limit: int = 100, include_quota: bool = False) -> List[ChunkSchema]:

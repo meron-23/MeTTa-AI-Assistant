@@ -13,34 +13,7 @@ def _get_collection(mongo_db: Database, name: str) -> Collection:
     if mongo_db is None:
         raise RuntimeError("Database connection not initialized — pass a valid mongo_db")
     return mongo_db.get_collection(name)
-# <<<<<<< Updated upstream
 
-# Set up MongoDB schema/collections for chunks and metadata.
-class ChunkSchema(BaseModel):
-    chunkId: str
-    source: Literal["code", "documentation", "others"]
-    chunk: str
-    isEmbedded: bool = False
-
-    # Code-specific fields
-    project: Optional[str] = None
-    repo: Optional[str] = None
-    section: Optional[List[str]] = None
-    file: Optional[List[str]] = None
-    version: Optional[str] = None
-
-    # Documentation-specific fields
-    url: Optional[str] = None
-    page_title: Optional[str] = None
-    category: Optional[str] = None
-
-    # PDF-specific fields
-    filename: Optional[str] = None
-    page_numbers: Optional[List[int]] = None
-
-
-# =======
-# >>>>>>> Stashed changes
 # Function to insert a single chunk into the MongoDB collection with validation.
 async def insert_chunk(chunk_data: dict, mongo_db: Database = None) -> str | None:
     """

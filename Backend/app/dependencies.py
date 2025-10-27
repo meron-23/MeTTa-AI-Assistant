@@ -3,7 +3,7 @@ from pymongo import AsyncMongoClient
 from pymongo.database import Database
 from sentence_transformers import SentenceTransformer
 from qdrant_client import AsyncQdrantClient
-from decouple import config
+from decouple import config 
 from app.repositories.chunk_repository import ChunkRepository
 from app.services.llm_service import BaseLLMProvider, GeminiLLMProvider
 from app.services.chunk_annotation_service import ChunkAnnotationService
@@ -33,18 +33,18 @@ def get_chunk_repository(mongo_db: Database = Depends(get_mongo_db)) -> ChunkRep
     """Provide a ChunkRepository instance with MongoDB dependency injection."""
     return ChunkRepository(mongo_db)
 
-
 def get_llm_provider() -> BaseLLMProvider:
-    """Provide the configured LLM Provider instance."""
-    gemini_api_key = config("GEMINI_API_KEY", default=None)
-
-    if not gemini_api_key:
-        # Raise an error instead of just printing
+    """
+    Provide the configured LLM Provider instance.
+    The GeminiLLMProvider's underlying client now handles key loading and rotation 
+    from the environment (looking for GEMINI_API_KEYS or GEMINI_API_KEY).
+    """
+    # Check for at least one key presence to ensure the service can run.
+    if not (config("GEMINI_API_KEYS", default="") or config("GEMINI_API_KEY", default="")):
         raise ValueError(
-            "GEMINI_API_KEY is not set. The application cannot function without it."
+            "No Gemini API keys provided. Set GEMINI_API_KEY or GEMINI_API_KEYS environment variables."
         )
-
-    return GeminiLLMProvider(api_key=gemini_api_key)
+    return GeminiLLMProvider() 
 
 
 def get_annotation_service(
