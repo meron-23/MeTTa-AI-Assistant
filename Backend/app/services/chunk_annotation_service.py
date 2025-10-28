@@ -168,7 +168,7 @@ class ChunkAnnotationService:
 
         duration = time.perf_counter() - start_time
         logger.info(
-            "Batch summary → Total: {}, Success: {}, Quota: {}, ❌ Failed: {}, Duration: {:.2f}s",
+            "Batch summary → Total: {}, Success: {}, Quota: {}, Failed: {}, Duration: {:.2f}s",
             len(chunks), len(processed), quota_failed, failed, duration
         )
 
@@ -201,7 +201,7 @@ class ChunkAnnotationService:
                 if res:
                     processed.append(chunk_id)
             except LLMQuotaExceededError:
-                logger.critical("💥 Quota still exceeded on retry for {}; aborting further retries.", chunk_id)
+                logger.critical("Quota still exceeded on retry for {}; aborting further retries.", chunk_id)
                 break
             except Exception as e:
                 logger.error("Error retrying chunk {}: {}: {}", chunk_id, type(e).__name__, e)
