@@ -1,0 +1,47 @@
+name: AI PR Review
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: ${{ github.repository }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  run-review:
+    runs-on: ubuntu-latest
+    steps:
+      # Checkout PR branch (works even for forked repos)
+      - name: Checkout PR branch
+        uses: actions/checkout@v3
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.ref }}
+          submodules: false
+
+      # Checkout the shared AI reviewer repo into "tools"
+      - name: Checkout AI reviewer tools
+        uses: actions/checkout@v3
+        with:
+          repository: BekLG/Ai-PR-reviewer
+          path: tools
+
+      # Install Python dependencies
+      - name: Install dependencies
+        run: pip install requests
+
+      # Run the AI reviewer script
+      - name: Run AI reviewer
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          GITHUB_SHA: ${{ github.event.pull_request.head.sha }}
+          BASE_SHA: ${{ github.event.before }}
+        run: python tools/scripts/call_gemini.py

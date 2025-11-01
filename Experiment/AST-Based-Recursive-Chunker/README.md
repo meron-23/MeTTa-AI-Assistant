@@ -12,14 +12,20 @@ Any vector store requires chunking large documents for effective search.
 
 ## What’s new in this iteration
 
-- AST-driven + symbol-aware chunking:
-  - We still parse MeTTa into an AST, but now add a middle layer that aggregates code by symbol (defs, types, asserts, calls) before chunking.
-- Recursive splitting for oversized nodes (preserves semantics while fitting size).
-- PostgreSQL backend:
-  - text_nodes: stores source ranges + file_path (no duplicate text).
-  - symbols: arrays of text_node IDs grouped by symbol.
-  - chunks: stores the final chunk text.
-- Dev-only schema reset (optional) to iterate quickly on schema changes.
+**Now:**  
+We have migrated to **MongoDB** for greater flexibility, scalability, and speed.  
+
+This makes it easier to evolve our data model as the project grows.
+
+- **Collections:**  
+  - `text_nodes`: Stores code ranges and metadata for each AST node.
+  - `symbols`: Stores symbol information (definitions, calls, asserts, types) as arrays of references to `text_nodes`.
+  - `chunks`: Stores the final code chunks for retrieval and embedding.
+
+- **Why MongoDB?**
+  - No schema migrations needed—collections and documents can evolve naturally.
+  - Fast, scalable, and easy to use with Python via [PyMongo](https://www.mongodb.com/docs/languages/python/pymongo-driver).
+  - Flexible document structure: each collection contains all the information previously stored in SQL tables, but now as documents.
 
 ---
 
@@ -73,31 +79,41 @@ Steps:
 6. Chunking:
    - Merge related nodes into chunks up to max_size.
    - If a node is too large, split recursively by its sub-nodes.
-7. Store final chunks (chunk_text) in Postgres.
+7. Store final chunks (chunk_text) in Mongo db.
 
 ---
 
-## Database Schema (dev)
+## Example Document Structures
 
-- text_nodes
-  - id SERIAL PRIMARY KEY
-  - text_range INTEGER[2] NOT NULL  (start, end character offsets)
-  - file_path TEXT NOT NULL          (currently a demo path; repo parsing next)
-  - node_type TEXT NOT NULL          (rule, call, type, assert, comment, …)
+**text_nodes**
+```json
+{
+  "_id": ObjectId,
+  "text_range": [start, end],
+  "file_path": "path/to/file.metta",
+  "node_type": "RuleGroup"
+}
+```
 
-- symbols
-  - id SERIAL PRIMARY KEY
-  - name TEXT NOT NULL
-  - defs INTEGER[]
-  - calls INTEGER[]
-  - asserts INTEGER[]
-  - types INTEGER[]
-  (arrays hold text_node IDs)
+**symbols**
+```json
+{
+  "_id": ObjectId,
+  "name": "symbol_name",
+  "defs": [text_node_id, ...],
+  "calls": [text_node_id, ...],
+  "asserts": [text_node_id, ...],
+  "types": [text_node_id, ...]
+}
+```
 
-- chunks
-  - id SERIAL PRIMARY KEY
-  - chunk_text TEXT NOT NULL
-
+**chunks**
+```json
+{
+  "_id": ObjectId,
+  "chunk_text": "MeTTa code chunk..."
+}
+```
 ---
 
 ## Getting the Best Out of Chunks
@@ -145,10 +161,11 @@ Note: When embedding, store both vectors + raw chunks.
 Create a .env:
 
 ```env
-POSTGRES_URL=postgresql://postgres:password@localhost:5433/metta_chunks
+mongo_uri=mongodb://localhost:27017
 ```
 
 ---
+
 
 ## Running the Chunker
 
@@ -160,14 +177,28 @@ source .venv/bin/activate
 # Install dependencies
 pip install -r requirements.txt
 
-# Normal run
-python chunker.py [input_file_path] [output_file_path] --max-size 1500
+# Repo-level chunking (new)
+python chunker.py --max-size 1500
 ```
 
 Outputs:
-- Chunked code stored in DB (chunks table).
+- Chunked code stored in DB (chunks collection).
 - Related defs/types/asserts/calls grouped by symbol.
 - Oversized nodes recursively split while preserving semantics.
+- For repo-level runs: all files in a repo are processed together, with correct symbol scoping per repo.
+
+---
+
+## Repo-Level Chunking
+
+The chunker now supports processing an entire repository at once:
+
+- Reads a JSON index (e.g., `metta_index.json`) mapping file hashes to their repo-relative paths.
+- Groups files by repository, then iterates through each file in a repo.
+- Chunks each file and stores the results in MongoDB.
+- Ensures symbol scoping is correct by allowing symbol tables to be reset per repo.
+
+This enables scalable, automated chunking for large codebases and supports downstream retrieval and embedding workflows.
 
 ---
 
@@ -185,3 +216,5 @@ Outputs:
   https://www.tigerdata.com/learn/building-python-apps-with-postgresql
 - Symbol Table in compilers
   https://www.geeksforgeeks.org/compiler-design/symbol-table-compiler
+- PyMongo
+  https://www.mongodb.com/docs/languages/python/pymongo-driver 

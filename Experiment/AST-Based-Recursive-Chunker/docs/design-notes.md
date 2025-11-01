@@ -1,6 +1,6 @@
 # Notes on Building the MeTTa AST Chunker
 
-This is a working doc for how I approached chunking in MeTTa using an AST parser, a Postgres backend, and a symbol-aware preprocessing layer. It explains the why behind each decision.
+This is a working doc for how I approached chunking in MeTTa using an AST parser, a Mongo db backend, and a symbol-aware preprocessing layer. It explains the why behind each decision.
 
 ---
 
@@ -63,21 +63,22 @@ This index acts as a semantic aggregator so that chunking can group all expressi
 
 ---
 
-## Database Schema
 
-There are 3 tables in our postgres database.
+## Database Collections (MongoDB)
+
+There are 3 main collections in our MongoDB database (using PyMongo):
 
 ### 1. text_nodes
 
 Stores code range (not the actual code) from AST nodes.
 
-```sql
-CREATE TABLE IF NOT EXISTS text_nodes (
-    id SERIAL PRIMARY KEY,
-    text_range INTEGER[2] NOT NULL,
-    file_path TEXT NOT NULL,
-    node_type TEXT NOT NULL
-);
+```json
+{
+  "_id": ObjectId,
+  "text_range": [start, end],
+  "file_path": "path/to/file.metta",
+  "node_type": "RuleGroup"
+}
 ```
 
 - text_range: character offsets to slice original source (avoid duplication)
@@ -88,38 +89,41 @@ CREATE TABLE IF NOT EXISTS text_nodes (
 
 A lightweight index for semantic grouping.
 
-```sql
-CREATE TABLE IF NOT EXISTS symbols (
-    id SERIAL PRIMARY KEY,
-    name TEXT NOT NULL,
-    defs INTEGER[],
-    calls INTEGER[],
-    asserts INTEGER[],
-    types INTEGER[]
-);
+```json
+{
+  "_id": ObjectId,
+  "name": "symbol_name",
+  "defs": [text_node_id, ...],
+  "calls": [text_node_id, ...],
+  "asserts": [text_node_id, ...],
+  "types": [text_node_id, ...]
+}
 ```
 
 - name: the symbol (function/variable)
-- columns: lists of text_node ids for that symbol
+- fields: lists of text_node ids for that symbol
 
 ### 3. chunks
 
-Stores final chunked text based on the symbol index table.
+Stores final chunked text based on the symbol index collection.
 
-```sql
-CREATE TABLE IF NOT EXISTS chunks (
-    id SERIAL PRIMARY KEY,
-    chunk_text TEXT NOT NULL
-);
+```json
+{
+  "_id": ObjectId,
+  "chunk_text": "MeTTa code chunk..."
+}
 ```
 
-- Store the actual chunk text (simple retrieval and embedding later)
+- Stores the actual chunk text (simple retrieval and embedding later)
 
 ---
 
-## Why Postgres?
 
-Reliable, easy indexing, and good with arrays. psycopg keeps CRUD simple. 
+## Why MongoDB?
+
+- Schema-less, flexible document storage (no migrations needed)
+- Fast, scalable, and easy to use with Python ([PyMongo](https://www.mongodb.com/docs/languages/python/pymongo-driver))
+- Arrays and references are natively supported in documents
 
 ---
 
@@ -130,16 +134,21 @@ Reliable, easy indexing, and good with arrays. psycopg keeps CRUD simple.
 - Step 3: Group related nodes by symbol into potential chunks.
 - Step 4: ChunkPreprocessedCode merges groups under max size.
   - If a node is too large → recursively split (ChunkCodeRecursively).
-- Step 5: Store final chunks in Postgres.
+- Step 5: Store final chunks in Mongodb.
 
 This avoids oversized nodes breaking the chunker while preserving semantics.
 
 ---
 
+
 ## Example Chunking Run
 
 ```bash
+# Single-file run (legacy) // try on previous branches
 python chunker.py input.metta output.txt --max-size 500
+
+# Repo-level chunking (new)
+python chunker.py --max-size 500
 ```
 
 Output:
@@ -147,12 +156,25 @@ Output:
 - Chunked code stored in DB.
 - Related defs/types/asserts/calls grouped by symbol.
 - Oversized nodes recursively split.
+- For repo-level runs: all files in a repo are processed together, with correct symbol scoping per repo.
+
+---
+
+## Repo-Level Chunking
+
+The chunker now supports processing an entire repository at once:
+
+- Reads a JSON index (e.g., `metta_index.json`) mapping file hashes to their repo-relative paths.
+- Groups files by repository, then iterates through each file in a repo.
+- Chunks each file and stores the results in MongoDB.
+- Ensures symbol scoping is correct by allowing symbol tables to be reset per repo.
+
+This enables scalable, automated chunking for large codebases and supports downstream retrieval and embedding workflows.
 
 ---
 
 ## Next Steps
 
-- Repository-level parsing:
-  - Traverse repos at a high level (multi-file, module-aware).
-  - Persist real file_path values per node (currently using a demo file path).
-- Chunking Comments with functions by proximity. 
+- Further improvements to cross-file symbol aggregation and repo-level analytics.
+- Persist real file_path values per node (currently using a demo file path).
+- Chunking Comments with functions by proximity.
