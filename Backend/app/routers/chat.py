@@ -27,13 +27,13 @@ class ChatRequest(BaseModel):
 
 @router.post("/", summary="Chat with RAG system")
 async def chat(
-    request: ChatRequest,
+    chat_request: ChatRequest,
     model_dep = Depends(get_embedding_model_dep),
     qdrant = Depends(get_qdrant_client_dep),
     default_llm = Depends(get_llm_provider_dep),
 ):
-    query, provider, model = request.query, request.provider, request.model
-    mode, top_k = request.mode, request.top_k
+    query, provider, model = chat_request.query, chat_request.provider, chat_request.model
+    mode, top_k = chat_request.mode, chat_request.top_k
     collection_name = os.getenv("COLLECTION_NAME")
     if not collection_name:
         raise HTTPException(status_code=500, detail="COLLECTION_NAME not set")
