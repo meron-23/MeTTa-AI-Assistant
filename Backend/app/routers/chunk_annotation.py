@@ -1,15 +1,14 @@
 from loguru import logger
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
-
+from app.db.users import UserRole
 
 from app.services.chunk_annotation_service import ChunkAnnotationService
 from app.core.clients.llm_clients import LLMQuotaExceededError
-from app.dependencies import get_annotation_service
+from app.dependencies import get_annotation_service, require_role
 from app.model.chunk import ChunkSchema, AnnotationStatus
 
 router = APIRouter(prefix="/annotation", tags=["Chunk Annotation"])
-
 
 
 @router.post(
@@ -22,14 +21,16 @@ async def trigger_batch_annotation_all(
     background_tasks: BackgroundTasks,
     limit: Optional[int] = None,
     annotation_service: ChunkAnnotationService = Depends(get_annotation_service),
+    _: None = Depends(require_role(UserRole.ADMIN)),
 ):
     """
     Triggers a background job that annotates unannotated/stale chunks.
     The job runs independently from the HTTP connection.
     """
 
-    logger.info("Admin triggered batch annotation of unannotated chunks (limit=%s).", limit)
-
+    logger.info(
+        "Admin triggered batch annotation of unannotated chunks (limit=%s).", limit
+    )
 
     try:
         background_tasks.add_task(
@@ -60,13 +61,15 @@ async def retry_failed_annotations(
     background_tasks: BackgroundTasks,
     include_quota: bool = False,
     annotation_service: ChunkAnnotationService = Depends(get_annotation_service),
+    _: None = Depends(require_role(UserRole.ADMIN)),
 ):
     """
     Triggers a background job that retries annotation for all previously failed chunks.
     Use `include_quota=true` to include quota-exceeded chunks as well.
     """
     logger.info(
-        "Admin triggered batch retry of failed chunks (include_quota=%s).", include_quota
+        "Admin triggered batch retry of failed chunks (include_quota=%s).",
+        include_quota,
     )
 
     try:
@@ -98,6 +101,7 @@ async def retry_failed_annotations(
 async def annotate_chunk(
     chunk_id: str,
     annotation_service: ChunkAnnotationService = Depends(get_annotation_service),
+    _: None = Depends(require_role(UserRole.ADMIN)),
 ):
     """
     Triggers annotation for a single chunk and returns the updated chunk record.
@@ -120,7 +124,9 @@ async def annotate_chunk(
             AnnotationStatus.FAILED_GEN,
         ]:
             logger.error(
-                "Annotation failed for chunk %s with status %s.", chunk_id, annotated_chunk.status
+                "Annotation failed for chunk %s with status %s.",
+                chunk_id,
+                annotated_chunk.status,
             )
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -141,7 +147,7 @@ async def annotate_chunk(
         )
 
     except HTTPException:
-        raise  
+        raise
 
     except Exception as e:
         logger.exception("Unexpected error during annotation for chunk %s.", chunk_id)
