@@ -7,12 +7,18 @@ from pymongo.collection import Collection
 from loguru import logger
 from typing import Union, List
 from app.model.chunk import ChunkSchema
+from app.model.chat_message import ChatMessageSchema
+from app.model.chat_session import ChatSessionSchema
+import time
 
 
 def _get_collection(mongo_db: Database, name: str) -> Collection:
     if mongo_db is None:
-        raise RuntimeError("Database connection not initialized — pass a valid mongo_db")
+        raise RuntimeError(
+            "Database connection not initialized — pass a valid mongo_db"
+        )
     return mongo_db.get_collection(name)
+
 
 # Function to insert a single chunk into the MongoDB collection with validation.
 async def insert_chunk(chunk_data: dict, mongo_db: Database = None) -> str | None:
@@ -21,17 +27,18 @@ async def insert_chunk(chunk_data: dict, mongo_db: Database = None) -> str | Non
     Returns inserted ID.
     """
     collection = _get_collection(mongo_db, "chunks")
-    try: 
+    try:
         chunk = ChunkSchema(**chunk_data)
     except Exception as e:
         logger.error("Validation error:", e)
         return None
-    
+
     if await collection.find_one({"chunkId": chunk.chunkId}):
         logger.warning(f"Chunk with chunkId '{chunk.chunkId}' already exists.")
         return None
     result = await collection.insert_one(chunk.model_dump())
     return chunk.chunkId
+
 
 # Function to insert many chunks into the MongoDB collection with validation.
 async def insert_chunks(
@@ -66,14 +73,18 @@ async def insert_chunks(
         logger.warning("Some duplicates were skipped.", e.details)
         inserted_ids = e.details.get("writeErrors", [])
         # Extract inserted ids if available
-        inserted_ids = [item["op"]["chunkId"] for item in inserted_ids if "op" in item and "chunkId" in item["op"]]
+        inserted_ids = [
+            item["op"]["chunkId"]
+            for item in inserted_ids
+            if "op" in item and "chunkId" in item["op"]
+        ]
 
         # Return list of inserted chunkIds
         return [chunk["chunkId"] for chunk in valid_chunks]
 
 
 # Function to retrieve  chunks by ChunkId from the MongoDB collection.
-async def get_chunk_by_id(chunk_id: str, mongo_db: Database =None) -> dict | None:
+async def get_chunk_by_id(chunk_id: str, mongo_db: Database = None) -> dict | None:
     """
     Retrieve a chunk by its ID.
     """
@@ -94,10 +105,9 @@ async def get_chunks(
     cursor = collection.find(filter_query, {"_id": 0}).limit(limit)
     return [doc async for doc in cursor]
 
+
 async def update_embedding_status(
-    chunk_ids: Union[str, List[str]], 
-    status: bool, 
-    mongo_db: Database = None
+    chunk_ids: Union[str, List[str]], status: bool, mongo_db: Database = None
 ) -> int:
     """
     Update the embedding status of one or more chunks.
@@ -106,7 +116,7 @@ async def update_embedding_status(
         chunk_ids (Union[str, List[str]]): One chunkId or a list of chunkIds to update.
         status (bool): The new embedding status (True/False).
         mongo_db (Database, optional): MongoDB connection.
-    
+
     Returns:
         int: Number of documents modified.
     """
@@ -115,19 +125,20 @@ async def update_embedding_status(
     # Normalize input to list
     if isinstance(chunk_ids, str):
         filter_query = {"chunkId": chunk_ids}
-        result = await collection.update_one(filter_query, {"$set": {"isEmbedded": status}})
+        result = await collection.update_one(
+            filter_query, {"$set": {"isEmbedded": status}}
+        )
         return result.modified_count
     else:
         filter_query = {"chunkId": {"$in": chunk_ids}}
-        result = await collection.update_many(filter_query, {"$set": {"isEmbedded": status}})
+        result = await collection.update_many(
+            filter_query, {"$set": {"isEmbedded": status}}
+        )
         return result.modified_count
 
 
-
 # Function to update any fields of a single chunk by chunkID.
-async def update_chunk(
-    chunk_id: str, updates: dict, mongo_db: Database = None
-) -> int:
+async def update_chunk(chunk_id: str, updates: dict, mongo_db: Database = None) -> int:
     """
     Update any fields of a single chunk by chunkId.
     Returns the number of documents modified (0 or 1).
@@ -135,6 +146,7 @@ async def update_chunk(
     collection = _get_collection(mongo_db, "chunks")
     result = await collection.update_one({"chunkId": chunk_id}, {"$set": updates})
     return result.modified_count
+
 
 # Function to update multiple chunks matching a filter query.
 async def update_chunks(
@@ -147,6 +159,7 @@ async def update_chunks(
     collection = _get_collection(mongo_db, "chunks")
     result = await collection.update_many(filter_query, {"$set": updates})
     return result.modified_count
+
 
 # Function to delete a chunk by chunkId.
 async def delete_chunk(chunk_id: str, mongo_db: Database = None) -> int:
@@ -227,12 +240,15 @@ async def clear_ingestion_status(
 # ----------------------------------'
 # SYMBOLS CRUD
 # ----------------------------------
-async def upsert_symbol(name: str, col: str, code: str, mongo_db: Database = None) -> Optional[ObjectId]:
+async def upsert_symbol(
+    name: str, col: str, code: str, mongo_db: Database = None
+) -> Optional[ObjectId]:
     """Add a node_id to the given symbol's column (defs, calls, asserts, types)."""
     symbols_collection = _get_collection(mongo_db, "symbols")
     update = {"$addToSet": {col: code}}
     result = await symbols_collection.update_one({"name": name}, update, upsert=True)
     return result.upserted_id if result.upserted_id else None
+
 
 async def get_symbol(name: str, mongo_db: Database = None) -> Union[dict, str]:
     """Fetch a symbol document by name."""
@@ -242,6 +258,7 @@ async def get_symbol(name: str, mongo_db: Database = None) -> Union[dict, str]:
         return result
     return "Symbol not found"
 
+
 async def get_all_symbols(mongo_db: Database = None) -> List[dict]:
     """Return all documents from the symbols collection."""
     symbols_collection = _get_collection(mongo_db, "symbols")
@@ -250,11 +267,79 @@ async def get_all_symbols(mongo_db: Database = None) -> List[dict]:
         results.append(doc)
     return results
 
+
 async def clear_symbols_index(mongo_db: Database = None) -> None:
-        """
-        clear these collections after a function scope is processed
-        to avoid duplicate key errors on processing same function names 
-        in different scopes
-        """
-        symbols_collection = _get_collection(mongo_db, "symbols")
-        await symbols_collection.delete_many({})
+    """
+    clear these collections after a function scope is processed
+    to avoid duplicate key errors on processing same function names
+    in different scopes
+    """
+    symbols_collection = _get_collection(mongo_db, "symbols")
+    await symbols_collection.delete_many({})
+
+
+# ----------------------------------
+# CHAT MESSAGES CRUD
+# ----------------------------------
+async def insert_chat_message(
+    msg_data: dict, mongo_db: Database = None
+) -> Optional[str]:
+    """
+    Insert a single chat message into the 'chat_messages' collection.
+    Generates messageId/createdAt if missing. Returns messageId.
+    """
+    collection = _get_collection(mongo_db, "chat_messages")
+    try:
+        if "messageId" not in msg_data or not msg_data.get("messageId"):
+            msg_data["messageId"] = str(ObjectId())
+        if "createdAt" not in msg_data or msg_data.get("createdAt") is None:
+            msg_data["createdAt"] = int(time.time() * 1000)
+        chat_msg = ChatMessageSchema(**msg_data)
+    except Exception as e:
+        logger.error("Validation error:", e)
+        return None
+
+    await collection.insert_one(chat_msg.model_dump())
+    return chat_msg.messageId
+
+
+async def get_last_messages(
+    session_id: str,
+    limit: int = 10,
+    mongo_db: Database = None,
+) -> List[dict]:
+    """
+    Return the last `limit` messages for a session ordered chronologically (oldest -> newest).
+    """
+    collection = _get_collection(mongo_db, "chat_messages")
+    cursor = (
+        collection.find({"sessionId": session_id}).sort("createdAt", -1).limit(limit)
+    )
+    recent = [doc async for doc in cursor]
+    recent.reverse()
+    return recent
+
+
+# ----------------------------------
+# CHAT SESSIONS CRUD
+# ----------------------------------
+async def create_chat_session(mongo_db: Database = None) -> str:
+    """
+    Create a new chat session and return its sessionId.
+    """
+    collection = _get_collection(mongo_db, "chat_sessions")
+    sid = str(ObjectId())
+    doc = ChatSessionSchema(
+        sessionId=sid, createdAt=int(time.time() * 1000)
+    ).model_dump()
+    await collection.insert_one(doc)
+    return sid
+
+
+async def delete_chat_session(session_id: str, mongo_db: Database = None) -> int:
+    """
+    Delete a chat session document. Returns number of documents deleted (0 or 1).
+    """
+    collection = _get_collection(mongo_db, "chat_sessions")
+    result = await collection.delete_one({"sessionId": session_id})
+    return result.deleted_count
