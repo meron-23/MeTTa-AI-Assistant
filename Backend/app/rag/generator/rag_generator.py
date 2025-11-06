@@ -3,7 +3,6 @@ from app.rag.retriever.retriever import EmbeddingRetriever
 from app.rag.retriever.schema import Document
 from app.core.clients.llm_clients import LLMClient, LLMProvider
 from app.core.utils.llm_utils import LLMClientFactory, LLMResponseFormatter
-from loguru import logger
 
 class RAGGenerator:
     def __init__(
@@ -28,7 +27,6 @@ class RAGGenerator:
         retrieved_docs = await self.retriever.retrieve(query, top_k=top_k)
         context = self._assemble_context(retrieved_docs)
         prompt = LLMResponseFormatter.build_rag_prompt(query, context, history)
-        logger.info(prompt)
         response = await self.llm_client.generate_text(prompt)
 
         sources = self._format_sources(retrieved_docs) if include_sources else None

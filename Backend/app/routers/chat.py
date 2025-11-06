@@ -85,7 +85,6 @@ async def chat(
                 session_id=session_id, limit=10, mongo_db=mongo_db
             )
             raw_history = raw_history[:-1] if raw_history else raw_history
-            logger.info("raw historry %s", raw_history)
 
             history = [
                 {"role": m.get("role"), "content": m.get("content", "")}
