@@ -290,7 +290,7 @@ async def insert_chat_message(
 
 async def get_last_messages(
     session_id: str,
-    limit: int = 10,
+    limit: int = 5,
     mongo_db: Database = None,
 ) -> List[dict]:
     """

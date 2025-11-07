@@ -82,7 +82,7 @@ async def chat(
             )
 
             raw_history = await get_last_messages(
-                session_id=session_id, limit=10, mongo_db=mongo_db
+                session_id=session_id, limit=5, mongo_db=mongo_db
             )
             raw_history = raw_history[:-1] if raw_history else raw_history
 
