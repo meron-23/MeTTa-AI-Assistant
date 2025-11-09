@@ -1,4 +1,5 @@
-from fastapi import Request, Depends
+from fastapi import Request, Depends, HTTPException, status 
+from typing import Any, Dict 
 from pymongo import AsyncMongoClient
 from pymongo.database import Database
 from sentence_transformers import SentenceTransformer
@@ -6,6 +7,7 @@ from qdrant_client import AsyncQdrantClient
 from app.core.clients.llm_clients import LLMClient
 from app.repositories.chunk_repository import ChunkRepository
 from app.services.chunk_annotation_service import ChunkAnnotationService
+from app.services.key_management_service import KMS
 
 
 def get_mongo_client(request: Request) -> AsyncMongoClient:
@@ -44,3 +46,14 @@ def get_annotation_service(
 ) -> ChunkAnnotationService:
     """Provide ChunkAnnotationService that orchestrates chunk retrieval and annotation."""
     return ChunkAnnotationService(repository=repository, llm_provider=llm_provider)
+
+def get_kms(request: Request) -> KMS:
+    '''Key management service class dependency'''
+    return request.app.state.kms
+
+def get_current_user(request: Request):
+    '''Retrieve the current authenticated user from request state.'''
+    user = getattr(request.state, "user", None)
+    if not user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    return user
