@@ -8,6 +8,7 @@ from app.core.clients.llm_clients import LLMClient
 from app.repositories.chunk_repository import ChunkRepository
 from app.services.chunk_annotation_service import ChunkAnnotationService
 from app.services.key_management_service import KMS
+from app.db.users import UserRole
 
 
 def get_mongo_client(request: Request) -> AsyncMongoClient:
@@ -51,9 +52,24 @@ def get_kms(request: Request) -> KMS:
     '''Key management service class dependency'''
     return request.app.state.kms
 
-def get_current_user(request: Request):
-    '''Retrieve the current authenticated user from request state.'''
+
+def get_current_user(request: Request) -> dict:
+    """Return current user dict injected by AuthMiddleware or raise 401."""
     user = getattr(request.state, "user", None)
     if not user:
         raise HTTPException(status_code=401, detail="Not authenticated")
     return user
+
+
+def require_role(required_role: UserRole):
+    """Factory returning a dependency that enforces the required role."""
+
+    def _enforce_role(current_user: dict = Depends(get_current_user)) -> None:
+        role = current_user.get("role")
+        if role != required_role.value:
+            raise HTTPException(
+                status_code=403, detail=f"{required_role.value} access required"
+            )
+        return None
+
+    return _enforce_role
