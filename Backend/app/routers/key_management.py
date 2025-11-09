@@ -33,7 +33,7 @@ async def store_api_key(
             key=payload.service_name,
             value=encrypted_api_key,
             httponly=True,   # prevents JS access
-            # secure=True,     # only sent over HTTPS
+            secure=True,     # only sent over HTTPS
             samesite="Strict", # CSRF protection
             expires=(datetime.now(timezone.utc) + timedelta(days=7))
         )
