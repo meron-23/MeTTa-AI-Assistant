@@ -1,5 +1,4 @@
-from fastapi import Request, Depends, HTTPException, status 
-from typing import Any, Dict 
+from fastapi import Request, Depends, HTTPException
 from pymongo import AsyncMongoClient
 from pymongo.database import Database
 from sentence_transformers import SentenceTransformer

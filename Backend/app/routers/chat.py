@@ -74,15 +74,16 @@ async def chat(
     # Extract cookies
     encrypted_key = request.cookies.get(provider.lower())
     if not encrypted_key:
-        raise HTTPException(status_code=401,detail=f"Missing API key cookie for provider '{provider.lower()}'. ")
+        raise HTTPException(status_code=401, detail=f"Missing API key cookie for provider '{provider.lower()}'. ")
 
-    api_key = await kms.decrypt_api_key(encrypted_key, current_user["id"], provider, mongo_db)
-    # refersh encrypted_api_key expiry date | sliding expiration refresh
+    api_key = await kms.decrypt_api_key(encrypted_key, current_user["id"], provider.lower(), mongo_db)
+    # refresh encrypted_api_key expiry date | sliding expiration refresh
     response.set_cookie(
         key=provider.lower(), 
         value=encrypted_key, 
         httponly=True, 
         samesite="Strict",
+        secure=True,
         expires=(datetime.now(timezone.utc) + timedelta(days=7))
         )
     

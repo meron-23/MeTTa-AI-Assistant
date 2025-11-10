@@ -1,6 +1,6 @@
 from cryptography.fernet import Fernet
 from pymongo.database import Database
-from app.db.key import insert_dek, get_dek, get_api_services, delete_api_key
+from app.db.key import insert_dek, get_dek, get_api_provider, delete_api_key
 
 class KMS:
     """Key Management Service wrapping KEK."""
@@ -8,7 +8,7 @@ class KMS:
     def __init__(self, KEK: str):
         self.f = Fernet(KEK)
 
-    async def encrypt_and_store(self, userid: str, service_name: str, api_key: str, mongo_db: Database):
+    async def encrypt_and_store(self, userid: str, provider_name: str, api_key: str, mongo_db: Database):
         """
         Encrypt and store api key
         Returns (persist_success: bool, encrypted_api_key_bytes).
@@ -19,14 +19,14 @@ class KMS:
         encrypted_api_key = fernet_dek.encrypt(api_key.encode()).decode("utf-8")
         encrypted_dek = self.f.encrypt(DEK).decode("utf-8")
 
-        key_dict = {"userid": userid, "dek": encrypted_dek, "service_name": service_name}
+        key_dict = {"userid": userid, "dek": encrypted_dek, "provider_name": provider_name}
         generated = await insert_dek(key_dict, mongo_db)
         return generated, encrypted_api_key
 
-    async def decrypt_api_key(self, encrypted_api_key: str, userid: str, service_name: str, mongo_db: Database):
+    async def decrypt_api_key(self, encrypted_api_key: str, userid: str, provider_name: str, mongo_db: Database):
         """Decrypt stored encrypted_api_key."""
 
-        encrypted_DEK = await get_dek(service_name, userid, mongo_db)
+        encrypted_DEK = await get_dek(provider_name, userid, mongo_db)
         if encrypted_DEK is None:
             raise ValueError("DEK not found for given service/user")
 
@@ -35,10 +35,10 @@ class KMS:
         api_key = fernet_dek.decrypt(encrypted_api_key.encode()).decode("utf-8")
         return api_key
 
-    async def get_api_services(self, userid: str, mongo_db: Database):
-        services = await get_api_services(userid, mongo_db)
+    async def get_api_provider(self, userid: str, mongo_db: Database):
+        services = await get_api_provider(userid, mongo_db)
         return services if services else []
 
-    async def delete_api_key(self, userid: str, service_name: str, mongo_db: Database):
-        return await delete_api_key(userid, service_name, mongo_db)
+    async def delete_api_key(self, userid: str, provider_name: str, mongo_db: Database):
+        return await delete_api_key(userid, provider_name, mongo_db)
 

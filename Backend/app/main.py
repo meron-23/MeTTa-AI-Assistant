@@ -89,7 +89,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # ===== Key management service setup =====
     KEK = os.getenv("KEY_ENCRYPTION_KEY")
     if not KEK:
-        raise ValueError("KMS_KEK environment variable is required")
+        raise ValueError("KEY_ENCRYPTION_KEY environment variable is required")
     
     try:
         app.state.kms = KMS(KEK)
@@ -97,9 +97,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         logger.error(f"Invalid KMS_KEK: {e}")
         raise
 
-    app.state.kms = KMS(KEK)
     logger.info("Key Management Service initialized")
-
     yield  # -----> Application runs here
 
     # === Shutdown cleanup ===
