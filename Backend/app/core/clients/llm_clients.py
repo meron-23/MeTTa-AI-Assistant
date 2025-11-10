@@ -71,8 +71,12 @@ class GeminiClient(LLMClient):
         self._idx += 1
         return key
 
-    async def _call_generate(self, prompt: str, **kwargs):
-        current_key = self._next_key()
+    async def _call_generate(self, prompt: str, api_key: Optional[str] = None, **kwargs):
+        if api_key:
+            current_key = api_key
+        else:
+            current_key = self._next_key()
+
         client = ChatGoogleGenerativeAI(
             model=self._model_name,
             google_api_key=current_key,
@@ -83,11 +87,11 @@ class GeminiClient(LLMClient):
         return response
 
     async def generate_text(
-        self, prompt: str, *, temperature: float = 0.7, max_tokens: int = 1000, **kwargs
+        self, prompt: str, api_key: Optional[str] = None, *, temperature: float = 0.7, max_tokens: int = 1000, **kwargs
     ) -> str:
         try:
             resp = await self._generate_with_retry(
-                prompt, temperature=temperature, max_tokens=max_tokens, **kwargs
+                prompt, api_key, temperature=temperature, max_tokens=max_tokens, **kwargs
             )
             return resp.content.strip()
         except Exception as e:
@@ -96,8 +100,8 @@ class GeminiClient(LLMClient):
             raise
 
     @async_retry(retry_on=_is_rate_limit)
-    async def _generate_with_retry(self, prompt: str, **kwargs):
-        return await self._call_generate(prompt, **kwargs)
+    async def _generate_with_retry(self, prompt: str, api_key: Optional[str] = None, **kwargs):
+        return await self._call_generate(prompt, api_key, **kwargs)
 
 
 class OpenAIClient(LLMClient):
@@ -126,8 +130,13 @@ class OpenAIClient(LLMClient):
         self._idx += 1
         return key
 
-    async def _call_generate(self, prompt: str, **kwargs):
-        current_key = self._next_key()
+    async def _call_generate(self, prompt: str, api_key: Optional[str] = None, **kwargs):
+
+        if api_key:
+            current_key = api_key
+        else:
+            current_key = self._next_key()
+
         client = ChatOpenAI(
             model=self._model_name,
             api_key=current_key,
@@ -138,11 +147,11 @@ class OpenAIClient(LLMClient):
         return response
 
     async def generate_text(
-        self, prompt: str, *, temperature: float = 0.7, max_tokens: int = 1000, **kwargs
+        self, prompt: str, api_key: Optional[str] = None, *, temperature: float = 0.7, max_tokens: int = 1000, **kwargs
     ) -> str:
         try:
             resp = await self._generate_with_retry(
-                prompt, temperature=temperature, max_tokens=max_tokens, **kwargs
+                prompt, api_key=api_key, temperature=temperature, max_tokens=max_tokens, **kwargs
             )
             return resp.content.strip()
         except Exception as e:
@@ -151,8 +160,8 @@ class OpenAIClient(LLMClient):
             raise
 
     @async_retry(retry_on=_is_rate_limit)
-    async def _generate_with_retry(self, prompt: str, **kwargs):
-        return await self._call_generate(prompt, **kwargs)
+    async def _generate_with_retry(self, prompt: str, api_key: Optional[str] = None, **kwargs):
+        return await self._call_generate(prompt, api_key=api_key, **kwargs)
 
 
 def _load_gemini_keys_from_env() -> List[str]:
